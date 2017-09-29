@@ -404,7 +404,7 @@ void List::DrawItem(Int16 idx, RectanglePtr bounds) const
     // memory is left!
     char item[32];
     if (source && source->GetItem(idx, item, sizeof(item)))
-   	WinDrawChars(item, StrLen(item), bounds->topLeft.x, bounds->topLeft.y);
+   	WinDrawChars(item, (Int16)StrLen(item), bounds->topLeft.x, bounds->topLeft.y);
 }
 
 
@@ -539,7 +539,8 @@ MemPtr Form::GetTypedObject(UInt16 resid, FormObjectKind type) const
     }
     else return 0;
 }
-    
+
+#if 0    
 ControlPtr Form::GetTypedControl(UInt16 resid, ControlStyleType type) const
 {
     ControlPtr rtn = GetControl(resid);
@@ -547,6 +548,7 @@ ControlPtr Form::GetTypedControl(UInt16 resid, ControlStyleType type) const
     ErrNonFatalDisplay("GetTypedControl: A form object is not of the expected control type");
     return 0;
 }
+#endif
 
 void Form::DrawControl(UInt16 resid) const
 {
@@ -625,13 +627,21 @@ FieldPtr Form::GetFieldPtrWithFocus() const
 
 void Form::SetCheckBox(UInt16 resid, UInt16 val) const
 {
+#if 0
     ControlPtr cm = GetTypedControl(resid, checkboxCtl);
+#else
+    ControlPtr cm = GetControl(resid);
+#endif
     if (cm) CtlSetValue(cm, (Int16)val);
 }
 
 UInt16 Form::IsCheckBoxSet(UInt16 resid) const
 {
+#if 0
     ControlPtr cm = GetTypedControl(resid, checkboxCtl);
+#else
+    ControlPtr cm = GetControl(resid);
+#endif
     return (UInt16)((cm && CtlGetValue(cm)) ? 1 : 0);
 }
 
@@ -670,13 +680,13 @@ Boolean Form::EventHandler(EventPtr event) // static
         // if we don't handle it, then the FormObject will be 
         // delete by PalmOS, but not our Form object, so we need
         // to use care here!
-	form->HandleClose();
+		form->HandleClose();
     	break;
     case frmUpdateEvent:
         // redraw the form. The event data contains the form
         // ID and the update reason code
-	handled = form->HandleUpdate();
-	break;
+		handled = form->HandleUpdate();
+		break;
 #if 0
     case frmTitleSelectEvent:
         // not required yet
@@ -702,8 +712,8 @@ Boolean Form::EventHandler(EventPtr event) // static
 #endif
 
     case ctlSelectEvent:
-	handled = form->HandleSelect(event->data.ctlSelect.controlID);
-	break;
+		handled = form->HandleSelect(event->data.ctlSelect.controlID);
+		break;
 
 #if 0	
     case daySelectEvent:
@@ -734,15 +744,15 @@ Boolean Form::EventHandler(EventPtr event) // static
 
     case lstSelectEvent:
 #ifdef USE_LISTS
-	(void)form->HandleListSelect(event->data.lstSelect.listID,
+		(void)form->HandleListSelect(event->data.lstSelect.listID,
 	      			     event->data.lstSelect.selection);
 #endif
-	handled = False; // important; PalmOS may need to do more!
-	break;
+		handled = False; // important; PalmOS may need to do more!
+		break;
 	
     case menuEvent:
-	handled = form->HandleMenu(event->data.menu.itemID);
-	break;
+		handled = form->HandleMenu(event->data.menu.itemID);
+		break;
 
 #if 0
     case nilEvent: // timeout event
@@ -751,16 +761,18 @@ Boolean Form::EventHandler(EventPtr event) // static
 
     case penDownEvent:
     case penMoveEvent:
-    case penUpEvent:
         // not required yet
         break;
 #endif
-                
+    case penUpEvent:
+        handled = form->HandlePenUp((UInt16)event->screenX, (UInt16)event->screenY);
+        break;
+               
     case popSelectEvent:
-	handled = form->HandlePopupListSelect(event->data.popSelect.controlID,
+		handled = form->HandlePopupListSelect(event->data.popSelect.controlID,
 					      event->data.popSelect.listID,
 					      event->data.popSelect.selection);
-	break;
+		break;
 
 #if 0
     case sclEnterEvent:
@@ -770,10 +782,10 @@ Boolean Form::EventHandler(EventPtr event) // static
 #endif
 
     case sclRepeatEvent:
-	handled = form->HandleScroll(event->data.sclRepeat.scrollBarID,
+		handled = form->HandleScroll(event->data.sclRepeat.scrollBarID,
 				     event->data.sclRepeat.value,
 				     event->data.sclRepeat.newValue);
-	break;
+		break;
 	
 #if 0
 	// Events affecting tables; like controls and lists we typically
@@ -836,6 +848,13 @@ Boolean Form::HandleKeyDown(UInt16 chr, UInt16 keyCode, UInt16 &modifiers)
     (void)chr;
     (void)keyCode;
     (void)modifiers;
+    return False;
+}
+
+Boolean Form::HandlePenUp(UInt16 screenX, UInt16 screenY)
+{
+    (void)screenX;
+    (void)screenY;
     return False;
 }
 
@@ -1204,7 +1223,7 @@ void Application::EventLoop()
     do
     {
         ::EvtGetEvent(&event, EventWaitTime());
-	if (!::SysHandleEvent(&event))
+	if (!::SysHandleEvent(&event) || event.eType == penUpEvent)
 	{
 	    UInt16 error;
 	    if (!::MenuHandleEvent(0, &event, &error))

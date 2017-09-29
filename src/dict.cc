@@ -117,6 +117,23 @@ const char *DictionaryDatabase::MatchTypeName(UInt16 t)
 
 const char *DictionaryDatabase::LimitName(UInt16 n)
 {
+    return "Any\000"
+           "1\000\000\000"
+           "2\000\000\000"
+           "3\000\000\000"
+           "4\000\000\000"
+           "5\000\000\000"
+           "6\000\000\000"
+           "7\000\000\000"
+           "8\000\000\000"
+           "9\000\000\000"
+           "10\000\000"
+           "11\000\000"
+           "12\000\000"
+           "13\000\000"
+           "14\000\000"
+           "15"+n*4;
+#if 0    
     // these get used for labels and must be static for PalmOS
     static char rtn[5];
     char *p = rtn;
@@ -124,6 +141,7 @@ const char *DictionaryDatabase::LimitName(UInt16 n)
     if (n>0) { *p++ = (char)(n%10+48); *p = 0; }
     else StrCopy(rtn, "Any");
     return rtn;
+#endif
 }
 
 //----------------------------------------------------------------------------------
@@ -189,75 +207,83 @@ const char *DictionaryDatabase::NextPatternElt(char *&pat,
     rtn = 0;
     if (isupper(*pat))
     {
-	is_single = 1;
-	is_float = 0;
-	rtn = LetterMask(*pat);
+		is_single = 1;
+		is_float = 0;
+		rtn = LetterMask(*pat);
     }
     else if (*pat==FIX_ANY || *pat == FIX_VOWEL || *pat == FIX_CONSONANT)
     {
-	is_single = 0;
-	is_float = 0;
-	// fixed
-	if (*pat==FIX_ANY) rtn = ALL;
-	else if (*pat==FIX_VOWEL) rtn = VOWELS; 
-	else if (*pat==FIX_CONSONANT) rtn = CONSONANTS;
+		is_single = 0;
+		is_float = 0;
+		// fixed
+		if (*pat==FIX_ANY) rtn = ALL;
+		else if (*pat==FIX_VOWEL) rtn = VOWELS; 
+		else if (*pat==FIX_CONSONANT) rtn = CONSONANTS;
     }
     else if (islower(*pat))
     {
-	is_single = 1;
-	is_float = 1;
-	rtn = LetterMask((char)(*pat-('a'-'A')));
+		is_single = 1;
+		is_float = 1;
+		rtn = LetterMask((char)(*pat-('a'-'A')));
     }
     else if (*pat==FLT_ANY || *pat == FLT_VOWEL || *pat == FLT_CONSONANT)
     {
-	is_single = 0;
-	is_float = 1;
-	if (*pat==FLT_ANY) rtn = ALL;
-	else if (*pat==FLT_VOWEL) rtn = VOWELS; 
-	else if (*pat==FLT_CONSONANT) rtn = CONSONANTS;
+		is_single = 0;
+		is_float = 1;
+		if (*pat==FLT_ANY) rtn = ALL;
+		else if (*pat==FLT_VOWEL) rtn = VOWELS; 
+		else if (*pat==FLT_CONSONANT) rtn = CONSONANTS;
     }
     else if (*pat == '[' || *pat == '{' || *pat == '(' || *pat == '>')
     {
         unsigned long tmpmask = 0ul;
-	int negate = 0;
-	pat++;
-	rtn = 0ul;
-	if (*pat=='!' || *pat=='^')
-	{
-	    negate=1;
-	    pat++;
-	}
-	is_float = islower(*pat);
-	while (*pat!=']' && *pat != '}' && *pat != ')' && *pat != '>')
-	{
-	    if (*pat==0) return "Unterminated character range"; /* syntax error */
-	    char start = *pat;
-	    if (isupper(start)) 
-		tmpmask = LetterMask(start);
-	    else if (islower(start))
-	    {
-		start = toupper(start);
-		tmpmask = LetterMask(start);
-	    }
-	    else return "Invalid character in range"; // syntax error
-	    pat++;
-	    if (*pat=='-')
-	    {
+		int negate = 0;
 		pat++;
-		if (!isalpha(*pat)) return "Invalid character following `-'"; // syntax error
-		char end = *pat;
-		pat++;
-		if (islower(end))
-		    end = toupper(end);
-		while (start<=end)
+		rtn = 0ul;
+		if (*pat=='!' || *pat=='^')
 		{
-		    rtn |= tmpmask;
-		    tmpmask = LetterMask(++start);
+	    	negate=1;
+	    	pat++;
 		}
-	    }
-	    else rtn |= tmpmask;
-	}
-	if (negate) rtn ^= ALL;
+		is_float = islower(*pat);
+		is_single = 0;
+		while (*pat!=']' && *pat != '}' && *pat != ')' && *pat != '>')
+		{
+	    	if (*pat==0) return "Unterminated character range"; /* syntax error */
+	    	char start = *pat;
+	    	if (isupper(start)) 
+	    	{
+				tmpmask = LetterMask(start);
+			}
+	    	else if (islower(start))
+	    	{
+				start = toupper(start);
+				tmpmask = LetterMask(start);
+	    	}
+	    	else
+	    	{
+	    		return "Invalid character in range"; // syntax error
+	    	}
+	    	pat++;
+	    	if (*pat=='-')
+	    	{
+				pat++;
+				if (!isalpha(*pat)) return "Invalid character following `-'"; // syntax error
+				char end = *pat;
+				pat++;
+				if (islower(end))
+				{
+		    		end = toupper(end);
+		    	}
+				while (start<=end)
+				{
+		    		rtn |= tmpmask;
+		    		tmpmask = LetterMask(++start);
+				}
+	    	}
+	    	else rtn |= tmpmask;
+		}
+		if (negate) rtn ^= ALL;
     }
     return 0;
 }
@@ -268,81 +294,89 @@ const char *DictionaryDatabase::NextPat(char *&pat, int pos)
     while (isspace(*pat)) pat++;
     if (*pat)
     {
-	unsigned long v;
+		unsigned long v;
 #ifdef WORDEND
         if (*pat == '|')
-	{
-	    if (vlen>0)
-	    {
-		anchormasks[vlen-1] |= WORDEND;
-	    	simple_search = 0;
-		has_wordend_constraints = 1;
-	    }
-	}
-	else
+		{
+	    	if (vlen>0)
+	    	{
+				anchormasks[vlen-1] |= WORDEND;
+	    		simple_search = 0;
+				has_wordend_constraints = 1;
+	    	}
+		}
+		else
 #endif // WORDEND
-	if (isdigit(*pat)) // variable placeholder
-	{
+		if (isdigit(*pat)) // variable placeholder
+		{
 #if defined(WORDFINDPP) || defined(WORDFINDLITE)
-	    return 0;
+	    	return 0;
 #else
-	    int var = (*pat)-'0';
-	    if (isdigit(pat[1]))
-	    {
- 		var = var*10 + (pat[1]-'0');
-	    	++pat;
-	    }
-	    if (var<1 || var > 26) return "Variable number out of range"; // must be in range 1..26
-	    --var;
-	    anchormasks[vlen++] = VARNUM | var;
-	    simple_search = 0;
+	    	int var = (*pat)-'0';
+	    	if (isdigit(pat[1]))
+	    	{
+ 				var = var*10 + (pat[1]-'0');
+	    		++pat;
+	    	}
+	    	if (var<1 || var > 26) return "Variable number out of range"; // must be in range 1..26
+	    	--var;
+	    	anchormasks[vlen++] = VARNUM | var;
+	    	simple_search = 0;
 #ifdef VARVECT
-	    if (pat[1]=='/') // associated letter is explicitly given
-	    {
-	        pat += 2;
-	        int is_float, is_single;
-		if (vars)
-		    if ((err = NextPatternElt(pat, is_float, is_single, v)) != 0)
-		        return err; // syntax error
-		    else
-		        vars->SetConstraint(var, v);
-	    }
+	    	if (pat[1]=='/') // associated letter is explicitly given
+	    	{
+	        	pat += 2;
+	        	int is_float, is_single;
+				if (vars)
+				{
+		    		if ((err = NextPatternElt(pat, is_float, is_single, v)) != 0)
+		        		return err; // syntax error
+		    		else
+		        		vars->SetConstraint(var, v);
+		        }
+	    	}
 #endif VARVECT
 #endif
-	}
+		}
         else // letter or letter range
-	{
-	    int is_float, is_single;
-	    err = NextPatternElt(pat, is_float, is_single, v);
-	    if (err != 0) return err; // syntax error
-	    if (is_float)
-	    {
-	        anchormasks[vlen++] = 0l;
-		if (is_single)
 		{
-	    	    ++fixedpool[*pat-'a'];
-	    	    has_float_ranges = 1;
-	    	    simple_search = 0;
+	    	int is_float, is_single;
+	    	err = NextPatternElt(pat, is_float, is_single, v);
+	    	if (err != 0) return err; // syntax error
+	    	if (is_float)
+	    	{
+	        	anchormasks[vlen++] = 0l;
+				if (is_single)
+				{
+	    	    	++fixedpool[*pat-'a'];
+	    	    	has_float_ranges = 1;
+	    	    	simple_search = 0;
+				}
+				else if ((v&ALL)==ALL)
+				{
+		    		++wildfloats;
+		    	}
+				else
+				{
+		    		varpool[plen++] = v;
+	            	has_float_ranges = 1;
+	            	simple_search = 0;
+				}
+				for (int i = 0; i < 26; i++)
+				{
+		    		if ((v & (1ul<<i)) != 0)
+		    		{
+		    			++maxpool[i];
+		    		}
+		    	}
+	    	}
+	    	else // anchored letter or letter range
+	    	{
+				anchormasks[vlen++] = v;
+				if (is_single && pos==progpoint) ++progpoint;
+	    	}
 		}
-		else if ((v&ALL)==ALL)
-		    ++wildfloats;
-		else
-		{
-		    varpool[plen++] = v;
-	            has_float_ranges = 1;
-	            simple_search = 0;
-		}
-		for (int i = 0; i < 26; i++)
-		    if ((v & (1ul<<i)) != 0)
-		    	++maxpool[i];
-	    }
-	    else // anchored letter or letter range
-	    {
-		anchormasks[vlen++] = v;
-		if (is_single && pos==progpoint) ++progpoint;
-	    }
-	}
-	++pat;
+		++pat;
     }
     return (plen>32) ? "Pattern has too many floats" : 0; // only allow 32 floating ranges
     							  // (i.e. unsigned long bitmask).

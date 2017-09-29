@@ -192,7 +192,7 @@ class DictionaryList : public DatabaseList
     virtual Boolean Activate()
     {
         s.InitChoices(); // refresh list
-	return DatabaseList::Activate();
+		return DatabaseList::Activate();
     }
     virtual UInt16 TriggerID() const = 0;
     virtual ~DictionaryList()
@@ -274,12 +274,19 @@ class WordListSource : public ListSource
 {
   private:
     History history;
+    Boolean getFromHist;
     int nomore;
     friend class WordList;
   public:
     inline WordListSource()
-      : ListSource(), history(MAX_PAT_LEN), nomore(0)
+      : ListSource(), history(MAX_PAT_LEN),
+        getFromHist(False),
+        nomore(0)
     {}    
+    inline void GetFromHist(Boolean f)
+    {
+        getFromHist = f;
+    }
     const char *Start(char *pattern);
     virtual UInt16 NumItems();
     virtual Boolean GetItem(Int16 itemNum, Char* buf, UInt16 buflen);
@@ -308,14 +315,17 @@ class WordList
     void Reset()
     {
         s.nomore = 0;
+        s.GetFromHist(False);
         dict->Reset();
     }
     void NextPage()
     {
-	dict->ClearProgress();
+		dict->ClearProgress();
+		s.GetFromHist(False);
     }
     inline const char *Start(char *pattern)
     {
+        s.GetFromHist(False);
         return s.Start(pattern);
     }
     virtual Boolean HandleSelect(Int16 selection);
@@ -333,6 +343,7 @@ Boolean WordList::HandleSelect(Int16 selection)
 {
     const char *txt = s.GetItem(selection);
     ClipboardAddItem(clipboardText, txt, (UInt16)StrLen(txt));
+    Application::Instance()->GetForm()->PostUpdateEvent();
     return True;
 }
 
@@ -369,7 +380,7 @@ Boolean RadioGroupDialog::Activate()
     {
         if (title) FrmSetTitle(frm, title);
         for (UInt16 i = 0; i < numcbs; i++)
-            SetCheckBox(firstcb+i, (i==val));
+            SetCheckBox(firstcb+i, (UInt16)(i==val));
         return True;
     }
     return False;
@@ -574,6 +585,7 @@ class ConsultForm: public Form
     virtual Boolean HandleOpen();
     virtual void HandleClose();
     virtual Boolean HandleKeyDown(UInt16 chr, UInt16 keyCode, UInt16 &modifiers);
+    virtual Boolean HandlePenUp(UInt16 screenX, UInt16 screenY);
     virtual Boolean HandleSelect(UInt16 objID);
     virtual Boolean HandlePopupListSelect(UInt16 triggerID,
 					UInt16 listID,
@@ -620,6 +632,7 @@ class MainForm: public ConsultForm
     void SetLetterMode();
 
     virtual Boolean HandleOpen();
+    virtual Boolean HandlePenUp(UInt16 screenX, UInt16 screenY);
     virtual Boolean HandleSelect(UInt16 objID);
 
   public:
@@ -855,28 +868,40 @@ UInt16 WordListSource::NumItems()
 
 Boolean WordListSource::GetItem(Int16 itemNum, Char* buf, UInt16 buflen)
 {
-    int x;
-    (void)itemNum;
+    Boolean rtn = False;
     buf[0] = buf[buflen-1] = 0;
-    if (!nomore)
+    if (getFromHist)
     {
-        x = dict->NextMatch(buf, (int)buflen);
-        if (x < 0)
-        {
-            // making assumptions about the size below! XXX
-            StrIToA(buf, dict->Matches());
-            strcat(buf, " matches");
-            if (x == -2) strcat(buf, "(interrupted)");
-            nomore = 1;
-#ifdef IS_FOR_PALM
-            Form *owner = Application::Instance()->GetForm();
-            if (owner) ((WordForm*)owner)->DisableNextButton();
-#endif
-            return True;
-        }
-        else history.Set((UInt16)itemNum, buf);
+        strncpy(buf, history.Get((UInt16)itemNum), (int)buflen);
+        if (buf[0]) rtn = True;
     }
-    return nomore ? False : True;
+    else
+    {
+    	if (!nomore)
+	    {
+	    	rtn = True;
+	        int x = dict->NextMatch(buf, (int)buflen);
+	        if (x < 0)
+	        {
+	            // making assumptions about the size below! XXX
+	            StrIToA(buf, dict->Matches());
+	            strcat(buf, " matches");
+	            if (x == -2) strcat(buf, "(interrupted)");
+			    nomore = 1;
+#ifdef IS_FOR_PALM
+		        Form *owner = Application::Instance()->GetForm();
+		        if (owner) ((WordForm*)owner)->DisableNextButton();
+#endif
+	        }
+		}
+	    history.Set((UInt16)itemNum, buf);
+	    // If we're done, switch to getting items from the history;
+	    // this will get turned off when Next is pressed or when a
+	    // new search is started
+	    if (itemNum == (NumWordListItems-1))
+	        getFromHist = True;
+	}
+	return rtn;
 }
 
 
@@ -983,22 +1008,27 @@ Boolean ConsultForm::HandleKeyDown(UInt16 chr, UInt16 keyCode, UInt16 &modifiers
     if (chr == '~')
     {
         recall = 1;
-	return True;
+		return True;
     }
     else if (chr >= '0' && chr <= '9' && recall)
     {
         recall = 0;
-	historylist->GetItem((Int16)(chr-'0'), pattern, MAX_PAT_LEN);
-	SetModalLabels();
-	return True;
+		historylist->GetItem((Int16)(chr-'0'), pattern, MAX_PAT_LEN);
+		SetModalLabels();
+		return True;
     }
     else recall = 0;
     if (chr =='\n')
     {
         Go();
-	return True;
+		return True;
     }
     return False;
+}
+
+Boolean ConsultForm::HandlePenUp(UInt16 screenX, UInt16 screenY)
+{
+    return Form::HandlePenUp(screenX, screenY);
 }
 
 Boolean ConsultForm::HandleSelect(UInt16 objID)
@@ -1217,6 +1247,26 @@ void MainForm::PostHandle(EventType &event)
         SetLetterMode();    
 }
 
+Boolean MainForm::HandlePenUp(UInt16 screenX, UInt16 screenY)
+{
+	// See if the shift state has changed and toggle the floating/anchored
+	// button if needed
+    Boolean caps, num, aut;
+    UInt16 temp;
+    GrfGetState(&caps, &num, &temp, &aut);
+    if (caps == True && letter_case == LOWER)
+    {
+        letter_case = UPPER;
+        SetModalLabels();
+    }
+    else if (caps == False && letter_case == UPPER)
+    {
+        letter_case = LOWER;
+        SetModalLabels();
+    }
+    return ConsultForm::HandlePenUp(screenX, screenY);
+}
+
 Boolean MainForm::HandleSelect(UInt16 objID)
 {
     switch (objID)
@@ -1293,7 +1343,7 @@ Boolean MainForm::HandleSelect(UInt16 objID)
         patfield.Insert('^');
         break;
     case MainFormMultiCheckbox:
-        multi = !multi;
+        multi = (UInt16)!multi;
 	SetWordCountModalControls();
 	SetWordLengthModalControls();
 	break;
@@ -1517,7 +1567,7 @@ void WordForm::NextPage()
     if (!list.NoMore())
     {
         list.NextPage();
-	PostUpdateEvent();
+		PostUpdateEvent();
     }
 }
 
@@ -1654,13 +1704,13 @@ void WordFindApplication::SaveSettings()
 {
     Database config;
     MemHandle h = 0;
-    int x = CFGSZ;
-    x = x*4;
-    x = x/2;
+//    int x = CFGSZ;
+//    x = x*4;
+//    x = x/2;
     if (config.OpenByType(ConfigDBType, dmModeReadWrite, "WordFindCfg") == True)
 	h = config.GetRecord(0);
     if (h == 0)
-	h = config.NewRecord(0, (UInt16)x/2/*CFGSZ*/);
+	h = config.NewRecord(0, (UInt16)CFGSZ);
     else if (MemHandleSize(h) != CFGSZ)
         h = config.Resize(0, CFGSZ);
     if (h)

@@ -19,7 +19,7 @@
 #    include <string.h>
 #    include <ctype.h>
 
-     typedef unsigned short UInt;
+     //typedef unsigned short UInt;
      typedef unsigned short Boolean;
 #    define ltoa(x)	itoa(x)
 #  endif

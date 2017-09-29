@@ -527,7 +527,7 @@ class DatabaseListSource : public ListSource
     DatabaseListSource(UInt32 creator_in = 0, UInt32 type_in = 0);
     void InitChoices();
     Boolean HasItem(Int16 idx) const;
-    Char* Name(Int16 idx) const;
+    const Char* Name(Int16 idx) const;
     UInt16 Card(Int16 idx) const;
     LocalID ID(Int16 idx) const;
     virtual Boolean GetItem(Int16 itemNum, Char* buf, UInt16 buflen);
@@ -540,7 +540,7 @@ inline Boolean DatabaseListSource::HasItem(Int16 idx) const
     return (idx>=0 && idx<numdbs) ? True : False;
 }
 
-inline Char* DatabaseListSource::Name(Int16 idx) const
+inline const Char* DatabaseListSource::Name(Int16 idx) const
 {
     return (HasItem(idx) && dbnames) ? dbnames[idx] : "";
 }
@@ -805,6 +805,7 @@ class Form
 					UInt16 listID,
 					Int16 selection);
     virtual Boolean HandleKeyDown(UInt16 chr, UInt16 keyCode, UInt16 &modifiers);
+    virtual Boolean HandlePenUp(UInt16 screenX, UInt16 screenY);
 
     virtual Boolean HandleOpen(); // draw time
     virtual Boolean HandleUpdate();
