@@ -311,6 +311,14 @@ Changes in version 1.5
 
   Fixed some bugs in v1.4.
 
+Changes in 1.6
+
+  Added a button shortcurt for `-'.
+
+  Reduced stack useage; the introduction of the history feature
+  increased stack usage to such an extent that blowing the stack and
+  crashing the Pilot was possible in 1.4 and 1.5.
+
 
 7. Future Plans
 

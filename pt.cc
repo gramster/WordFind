@@ -487,6 +487,7 @@ Boolean MainForm::HandleSelect(UInt objID)
 	break;
     case MainFormClearButton:
         ClearField(MainFormPatternField);
+	pattern[0] = 0;
         break;
     case MainFormWildButton:
         InsertInField(MainFormPatternField, (letter_case == LOWER) ? '.' : ':');
@@ -503,6 +504,9 @@ Boolean MainForm::HandleSelect(UInt objID)
     case MainFormRightBracketButton:
         InsertInField(MainFormPatternField, ']');
         break;
+    case MainFormRangeButton:
+        InsertInField(MainFormPatternField, '-');
+        break;
     case MainFormNegateButton:
         InsertInField(MainFormPatternField, '!');
         break;
@@ -512,25 +516,25 @@ Boolean MainForm::HandleSelect(UInt objID)
     case MainFormGoButton:
 	pat = ReadField(MainFormPatternField);
 	if (pat && pat[0])
-    	{
-            strncpy(pattern, (const char *)pat, MAX_PAT_LEN-1);
-            pattern[MAX_PAT_LEN-1] = 0;
+	{
+	    strncpy(pattern, (const char *)pat, MAX_PAT_LEN-1);
+	    pattern[MAX_PAT_LEN-1] = 0;
 	    if (pattern[0])
 	    {
 #ifdef HISTORY
 	        history.Add(pattern);
 #endif
-		Save();
+	        Save();
 	        Application *a = Application::Instance();
                 WordForm *wordform = a ? (WordForm*)a->GetForm(WordFormForm) : 0;
                 if (wordform)
                 {
                     if (wordform->Start(pattern, matchtype, multi, 
 		    			minlength, maxlength,
-                			mincount, maxcount) == 0)
-					wordform->PostLoadEvent();
+                     			mincount, maxcount) == 0)
+		        wordform->PostLoadEvent();
 		    else
-			FrmAlert(NoDictBoxAlert); 
+		        FrmAlert(NoDictBoxAlert); 
                 }
             }
 	}
