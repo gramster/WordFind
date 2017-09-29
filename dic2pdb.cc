@@ -23,6 +23,7 @@ main(int argc, char **argv)
 	        strcpy(oname, argv[argc-1]);
 	        char *s = strrchr(oname, '.');
 	        if (s) strcpy(s, ".pdb");
+		 else strcat(oname, ".pdb");
 	        FILE *ofp = fopen(oname, "wb");
 	        if (ofp)
 	        {
@@ -118,12 +119,14 @@ main(int argc, char **argv)
 		    // records are at offsets (78+8*nrecs),
 		    // (78+8*nrecs+NodesPerRecord*4), ...
 
+		    printf("Writing record list:  0%"); fflush(stdout);
 		    int nodesize = (nnodes>=0x1FFFFul) ? 4 : 3; // 3 = packed demo dict
 		    unsigned long record_offset = ftell(ofp) + 8*nrecs;
 		    for (int i = 0; i < nrecs; i++)
 		    {
 			// record offset
 
+			printf("\b\b\b%2d%%", ((i+1)*100)/nrecs); fflush(stdout);
 			longbuf[0] = (record_offset>>24)&0xFF;
 			longbuf[1] = (record_offset>>16)&0xFF;
 			longbuf[2] = (record_offset>>8)&0xFF;
@@ -146,6 +149,7 @@ main(int argc, char **argv)
 		    fwrite(longbuf+4-nodesize, sizeof(char), nodesize, ofp);
 
 		    unsigned long nodenum = 1;
+		    printf("\nWriting records:  0%"); fflush(stdout);
 	            while (!feof(ifp))
 		    {
 			unsigned long node;
@@ -167,6 +171,7 @@ main(int argc, char **argv)
 			}
 			fwrite(longbuf, sizeof(char), nodesize, ofp);
 			nodenum++;
+			printf("\b\b\b%2d%%", (nodenum*100)/nnodes); fflush(stdout);
 #if 0
 			printf("%ld : %08lx %u %u %u %u\n",
 				nodenum, node, 
@@ -176,6 +181,7 @@ main(int argc, char **argv)
 				longbuf[3]);
 #endif
 		    }
+		    printf("\n");
 		    // pad the last record
 		    memset(longbuf, 0, 4);
 		    while ((nodenum++)%NodesPerRecord)
@@ -187,3 +193,4 @@ main(int argc, char **argv)
 	}
     }
 }
+

@@ -1,22 +1,33 @@
 #ifndef __FW_H
 #define __FW_H
 
-#define MY_CREATOR_ID	'xWrd'
+#define MY_CREATOR_ID		'xWrd'
 #define True			((Boolean)1)
 #define False			((Boolean)0)
 
-#define isspace(c)	((c)==' ' || (c)=='\t' || (c)=='\n')
-#define isupper(c)	((c)>='A' && (c)<='Z')
-#define islower(c)	((c)>='a' && (c)<='z')
-#define toupper(c)	((char)(islower(c) ? ((c)-'a'+'A') : (c)))
-#define isalpha(c)	(isupper(c) || islower(c))
+#define isspace(c)		((c)==' ' || (c)=='\t' || (c)=='\n')
+#define isupper(c)		((c)>='A' && (c)<='Z')
+#define islower(c)		((c)>='a' && (c)<='z')
+#define toupper(c)		((char)(islower(c) ? ((c)-'a'+'A') : (c)))
+#define isalpha(c)		(isupper(c) || islower(c))
 #define InRange(v, mn, mx)	((v) >= (mn) && (v) <= (mx))
 
-unsigned strlen(char *s);
-void strcpy(char *dst, const char *src);
-void strcat(char *dst, const char *src);
-int strcmp(char *s1, char *s2);
+#ifndef TEST
+#define strcpy(dst, src)	StrCopy(dst, src)
+#define strcat(dst, src)	StrCat(dst, src)
+#define strlen(s)		StrLen(s)
+#define strcmp(s1, s2)		StrCompare(s1, s2)
+#define itoa(l)			StrIToA(l)
+
+#endif
+
+void strncpy(char *dst, const char *src, unsigned n);
+void memcpy(char *dst, const char *src, unsigned n);
+void memset(char *dst, const char v, unsigned n);
+int strncmp(const char *s1, const char *s2, unsigned n);
 const char *ltoa(unsigned long l);
+
+void HMemCopy(char *buf, VoidHand h, UInt maxlen);
 
 struct formEventMap
 {
@@ -56,26 +67,61 @@ class Database
     Boolean OpenOrCreate(CharPtr name, ULong type, UInt mode = dmModeReadWrite,
     				ULong creator = MY_CREATOR_ID);
     DWord Close();
+    VoidHand NewRecord(UInt recnum, UInt size)
+    {
+	VoidHand rtn = DmNewRecord(db, &recnum, size);
+        ++numrecords;
+	return rtn;
+    }
+    VoidHand Resize(UInt recnum, UInt size)
+    {
+	return DmResizeRecord(db, recnum, size);
+    }
+    UInt CreateRecord(UInt recnum, UInt size)
+    {
+	(void)DmNewRecord(db, &recnum, size);
+        ++numrecords;
+	return recnum;
+    }
+    VoidHand QueryRecord(UInt recnum)
+    {
+        return (recnum>=0 && recnum<numrecords) ? DmQueryRecord(db, recnum) : 0;
+    }
+    VoidHand GetRecord(UInt recnum)
+    {
+        return (recnum>=0 && recnum<numrecords) ? DmGetRecord(db, recnum) : 0;
+    }
+    void ReleaseRecord(UInt recnum)
+    {
+        if (recnum>=0 && recnum<numrecords)
+	    DmReleaseRecord(db, recnum, true);
+    }
+    void WriteRecord(void *dptr, unsigned char *ptr, UInt size, UInt offset = 0)
+    {
+	DmWrite(dptr, offset, ptr, size); 
+    }
     ~Database();
 };
 
 class List
 {
+  protected:
     UInt id;
     ListPtr lst;
+    class Form *owner;
 
-  protected:
     static void ListDrawEventHandler(UInt idx, RectanglePtr bounds, CharPtr *data);
     virtual int NumItems();
     virtual char *GetItem(UInt idx);
     
   public:
-    List(UInt id_in = 0);
+    List(class Form *owner_in, UInt id_in = 0);
     UInt ID() const
     {
         return id;
     }
-    void Init();
+    virtual void Init();
+    virtual Boolean Activate();
     void Erase();
     virtual ~List();
 };
@@ -94,7 +140,7 @@ class Form
     virtual Boolean HandlePopupListSelect(UInt triggerID,
 					UInt listID,
 					UInt selection);
-    virtual Boolean Open();
+    virtual Boolean Open(); // draw time
     virtual Boolean Update();
   public:
     Form() : frm(0) {} // shouldn't use this one
@@ -119,11 +165,10 @@ class Form
     void DrawControl(UInt id);
     void EnableControl(UInt id);
     void DisableControl(UInt id);
-    void SetControlLabel(UInt resid, char *lbl);
+    void SetControlLabel(UInt resid, const char *lbl);
     void ClearField(UInt resid);
     CharPtr ReadField(UInt resid);
     void InsertInField(UInt resid, char c);
-    void SetField(UInt resid, char *txt);
     void SetCheckBox(UInt resid, UInt val = 1);
     UInt IsCheckBoxSet(UInt resid);
     void SetField(UInt resid, const char *text);
@@ -131,7 +176,8 @@ class Form
     void ClearRectangle(int left, int top, int width, int height);
     void Switch(UInt resid); // activate a different form
     VoidPtr GetObject(UInt resid);
-    Boolean Activate();
+    Boolean IsActive() const;
+    virtual Boolean Activate(); // pre-draw time
     virtual List *GetList();
     virtual void ShowProgress(int p);
     virtual ~Form();
@@ -144,6 +190,7 @@ class Dialog : public Form
     Dialog(Form *parent_in, UInt resid)
         : Form(resid), parent(parent_in)
     {}
+    virtual Boolean Activate();
     virtual void Init();
     virtual Boolean HandleSelect(UInt objID);
     virtual Boolean HandleScroll(UInt objid, Short oldv, Short newv);
@@ -157,6 +204,7 @@ class RadioGroupDialog : public Dialog
     UInt numcbs;
     UInt val;
     CharPtr title;
+    UInt GetValue();
   public:
     RadioGroupDialog(Form *parent_in,
     				UInt resid,
@@ -170,23 +218,10 @@ class RadioGroupDialog : public Dialog
           val(val_in),
           title(title_in) // must be static
     {}
-    virtual void Init()
-    {
-    	Dialog::Init();
-    	for (UInt i = 0; i < numcbs; i++)
-    	{
-            ControlPtr s = (ControlPtr)GetObject(firstcb+i);
-	    if (s)
-	    	CtlSetValue(s, (Short)((i==val)?1:0));
-	}
-        if (title) FrmSetTitle(frm, title);
-    }
-    UInt GetValue();
-    virtual UInt Run()
-    {
-        (void)Dialog::Run();
-		return GetValue();
-    }
+    virtual void Init();
+    virtual Boolean Activate();
+    virtual UInt Run();
+    virtual ~RadioGroupDialog();
 };
 
 class Application
@@ -213,6 +248,7 @@ class Application
   public:
     Application();
     static void SetActiveForm(Form *f);
+    static Boolean IsActive(const Form *f);
     static Application *Instance();
     static Boolean HideSecretRecords();
    
@@ -224,6 +260,8 @@ class Application
     DWord Main(Word cmd, Ptr cmdPBP, Word launchflags);
     virtual ~Application();
 };
+
+void DrawDebugText(int x, int y, const char *txt);
 
 #endif
 

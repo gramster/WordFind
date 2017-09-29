@@ -1,33 +1,26 @@
-#ifdef __cplusplus
-extern "C" {
-#endif
-#include <Pilot.h>
-#include <SysEvtMgr.h>
-#ifdef __cplusplus
-}
-#endif
+#include "mypilot.h"
 
 #include "fw.h"
 #ifdef __GNUC__
 #include "Callbacks.h"
 #endif
 
-unsigned strlen(char *s)
+void strncpy(char *dst, const char *src, unsigned n)
 {
-    char *b = s;
-    while (*s) ++s;
-    return (unsigned)(s-b);
-}
-
-void strcpy(char *dst, const char *src)
-{
-    while ((*dst++ = *src++) != 0)
+    while (n-- > 0 && (*dst++ = *src++) != 0)
         (void)0;
 }
 
-void strcat(char *dst, const char *src)
+void memset(char *dst, const char v, unsigned n)
 {
-    strcpy(dst + strlen(dst), src);
+    while (n-- > 0)
+        *dst++ = v;
+}
+
+void memcpy(char *dst, const char *src, unsigned n)
+{
+    while (n-- > 0)
+        *dst++ = *src++;
 }
 
 int strcmp(char *s1, char *s2)
@@ -38,6 +31,17 @@ int strcmp(char *s1, char *s2)
 	++s2;
     }
     return (*s1-*s2);
+}
+
+int strncmp(const char *s1, const char *s2, unsigned n)
+{
+    while (n > 0 && *s1 && *s1 == *s2)
+    {
+        ++s1;
+	++s2;
+	--n;
+    }
+    return (n==0) ? 0 : (*s1-*s2);
 }
 
 const char *ltoa(unsigned long l)
@@ -57,7 +61,22 @@ const char *ltoa(unsigned long l)
     }
 }
 
-//Application *Application::instance = 0;
+void HMemCopy(char *buf, VoidHand h, UInt maxlen)
+{
+    buf[0] = 0;
+    if (h)
+    {
+	char *s = (char *)MemHandleLock(h);
+	if (s)
+	{
+	    strncpy(buf, s, maxlen-1);
+	    buf[maxlen-1] = 0;
+	}
+	MemHandleUnlock(h);
+    }
+}
+
+//Application *Application::instance = 0; // assignment will crash
 Application *Application::instance;
 
 #ifdef __GNUC__
@@ -74,7 +93,11 @@ Boolean Database::Open(ULong type, UInt mode, ULong creator)
         numrecords = (int)::DmNumRecords(db);
         return True;
     }
-    return False;
+    else
+    {
+        numrecords = -1;
+        return False;
+    }
 }
 
     
@@ -116,13 +139,14 @@ Database::~Database()
 
 //-----------------------------------------------------------------
 
-List::List(UInt id_in)
-   : id(id_in), lst(0)
+List::List(Form *owner_in, UInt id_in)
+   : id(id_in), lst(0), owner(owner_in)
 { 
 }
 
+/* static */
 void List::ListDrawEventHandler(UInt idx, RectanglePtr bounds, 
-								CharPtr *data)
+				CharPtr *data)
 {
     (void)data;
     Form *form = Application::Instance()->GetForm();
@@ -134,15 +158,23 @@ void List::ListDrawEventHandler(UInt idx, RectanglePtr bounds,
 
 void List::Init()
 {
-    FormPtr frm = FrmGetActiveForm(); // should have owner pointer
-    lst = (ListPtr)FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, id));
-    LstSetListChoices(lst, (char**)0, (UInt)NumItems());
-    LstSetDrawFunction(lst, ListDrawEventHandler);
+}
+
+Boolean List::Activate() // owner must be active
+{
+    lst = (ListPtr)owner->GetObject(id);
+    if (lst)
+    {
+	LstSetListChoices(lst, (char**)0, (UInt)NumItems());
+    	LstSetDrawFunction(lst, ListDrawEventHandler);
+	return True;
+    }
+    return False;
 }
 
 void List::Erase()
 {
-    LstEraseList(lst);
+    if (lst) LstEraseList(lst);
 }
 
 char *List::GetItem(UInt idx)
@@ -167,14 +199,29 @@ Form::Form(UInt id_in)
 { 
 }
 
+void Form::Init()
+{
+    frm = ::FrmInitForm(id);
+}
+
 void Form::ShowProgress(int p)
 {
     (void)p;
 }
 
+Boolean Form::IsActive() const
+{
+    return Application::IsActive(this);
+}
+
 VoidPtr Form::GetObject(UInt resid)
 {
-    return FrmGetObjectPtr(frm, FrmGetObjectIndex(frm, resid));
+    if (frm && IsActive())
+    {
+        UInt oi = FrmGetObjectIndex(frm, resid);
+        return FrmGetObjectPtr(frm, oi);
+    }
+    else return 0;
 }
 
 void Form::DrawControl(UInt resid)
@@ -199,17 +246,16 @@ void Form::DisableControl(UInt resid)
     if (b) CtlSetEnabled(b, 0);
 }
 
-void Form::SetControlLabel(UInt resid, char *lbl)
+void Form::SetControlLabel(UInt resid, const char *lbl)
 {
     ControlPtr sel = (ControlPtr)GetObject(resid);
-    if (sel) CtlSetLabel(sel, lbl);
+    if (sel) CtlSetLabel(sel, (char*)lbl);
 }
 
 void Form::ClearField(UInt resid)
 {
     FieldPtr fld = (FieldPtr)GetObject(resid);
-    if (fld)
-        FldDelete(fld, 0, FldGetTextLength(fld));
+    if (fld) FldDelete(fld, 0, FldGetTextLength(fld));
 }
 
 CharPtr Form::ReadField(UInt resid)
@@ -221,17 +267,16 @@ CharPtr Form::ReadField(UInt resid)
 void Form::InsertInField(UInt resid, char c)
 {
     FieldPtr fld = (FieldPtr)GetObject(resid);
-    if (fld)
-        FldInsert(fld, &c, 1);
+    if (fld) FldInsert(fld, &c, 1);
 }
 
-void Form::SetField(UInt resid, char *txt)
+void Form::SetField(UInt resid, const char *txt)
 {
     FieldPtr fld = (FieldPtr)GetObject(resid);
     if (fld)
     {
         FldDelete(fld, 0, FldGetTextLength(fld));
-        FldInsert(fld, txt, strlen(txt));
+        FldInsert(fld, (char*)txt, strlen(txt));
     }
 }
 
@@ -275,16 +320,19 @@ void Form::ClearRectangle(int left, int top, int width, int height)
 
 Boolean Form::Activate()
 {
+    if (frm)
+    {
 	Application::Instance()->SetActiveForm(this);
-    ::FrmSetActiveForm(frm);
-    ::FrmSetEventHandler(frm, Form::EventHandler);
-    return true;
+        ::FrmSetActiveForm(frm);
+        ::FrmSetEventHandler(frm, Form::EventHandler);
+        return True;
+    }
+    return False;
 }
 
 void Form::Switch(UInt resid) // activate a different form
 {
-    Application *a = Application::Instance();
-    Form *f = a->GetForm(resid);
+    Form *f = Application::Instance()->GetForm(resid);
     if (f) f->PostLoadEvent();
 }
 
@@ -308,9 +356,9 @@ Boolean Form::EventHandler(EventPtr event) // static
     case frmOpenEvent:
 	handled = form->Open();
 	break;
-	case frmUpdateEvent:
-	    handled = form->Update();
-	    break;
+    case frmUpdateEvent:
+	handled = form->Update();
+	break;
     case menuEvent:
 	handled = form->HandleMenu(event->data.menu.itemID);
 	break;
@@ -358,12 +406,7 @@ Boolean Form::HandleMenu(UInt menuID)
     return False;
 }
 
-void Form::Init()
-{
-    frm = ::FrmInitForm(id);
-}
-
-Boolean Form::Open()
+Boolean Form::Open() // NB Dialogs mustn't use this (see PP pg 103)
 {
     Draw();
     return True;
@@ -385,9 +428,16 @@ Form::~Form()
 
 //------------------------------------------------------------
 
+Boolean Dialog::Activate()
+{
+    return Form::Activate();
+}
+
 void Dialog::Init()
 {
     Form::Init();
+//    Application::Instance()->SetActiveForm(this);
+//    ::FrmSetEventHandler(frm, Form::EventHandler);
 }
 
 Boolean Dialog::HandleSelect(UInt objID)
@@ -403,18 +453,44 @@ Boolean Dialog::HandleScroll(UInt objID, Short oldv, Short newv)
 UInt Dialog::Run()
 {
     Init();
-    Application::Instance()->SetActiveForm(this);
-    ::FrmSetEventHandler(frm, Form::EventHandler);
-    return FrmDoDialog(frm);
+    if (Activate())
+	return FrmDoDialog(frm);
+    return 0;
 }
 
 Dialog::~Dialog()
 {
     if (parent) parent->Activate();
-    FrmDeleteForm(frm);
+    if (frm) FrmDeleteForm(frm);
 }
 
 //------------------------------------------------------------
+
+void RadioGroupDialog::Init()
+{
+    Dialog::Init();
+}
+
+Boolean RadioGroupDialog::Activate()
+{
+    if (Dialog::Activate())
+    {
+        if (title) FrmSetTitle(frm, title);
+        for (UInt i = 0; i < numcbs; i++)
+        {
+            ControlPtr s = (ControlPtr)GetObject(firstcb+i);
+            if (s) CtlSetValue(s, (Short)((i==val)?1:0));
+        }
+	return True;
+    }
+    return False;
+}
+
+UInt RadioGroupDialog::Run()
+{
+    (void)Dialog::Run();
+    return GetValue();
+}
 
 UInt RadioGroupDialog::GetValue()
 {
@@ -427,6 +503,10 @@ UInt RadioGroupDialog::GetValue()
     return 0;
 }
 
+
+RadioGroupDialog::~RadioGroupDialog()
+{
+}
 
 //------------------------------------------------------------
 
@@ -503,12 +583,6 @@ Err Application::RomVersionCompatible(DWord requiredVersion, Word launchFlags)
     return 0;
 }
 
-DWord Application::Start()
-{
-    ::PrefGetPreferences(&sysPrefs);
-    return OpenDatabases();
-}
-
 int Application::EventWaitTime()
 {
     return evtWaitForever;
@@ -541,6 +615,12 @@ Boolean Application::HandleEvent(EventType &event)
 	break;
     }
     return handled;
+}
+
+DWord Application::Start()
+{
+    ::PrefGetPreferences(&sysPrefs);
+    return OpenDatabases();
 }
 
 void Application::EventLoop()
@@ -610,8 +690,21 @@ Application::Application()
     instance = this;
 }
 
+Boolean Application::IsActive(const Form *f)
+{
+    return (instance && (instance->GetForm() == f));
+}
+
 Application::~Application()
 {
+}
+
+void DrawDebugText(int x, int y, const char *txt)
+{
+    WinHandle h = WinGetDrawWindow();
+    WinSetDrawWindow(WinGetDisplayWindow());
+    WinDrawChars(txt, strlen(txt), x, y);
+    WinSetDrawWindow(h);
 }
 
 DWord PilotMain(Word cmd, Ptr cmdPBP, Word launchflags)

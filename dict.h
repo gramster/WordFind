@@ -9,7 +9,7 @@
 #define ALL	    (0x3FFFFFFl)
 #define VOWELS      ((1l<<0) | (1l<<4) | (1l<<8) | (1l<<14) | (1l<<20))
 #define CONSONANTS  (ALL - VOWELS)
-#define MAXPATLEN	(30)
+#define MAXPATLEN   (30)
 
 char *MatchTypeName(UInt t);
 char *LimitName(UInt n);
@@ -33,9 +33,10 @@ class DictionaryDatabase
     int stepnum, matches, progress;
     int starts[32];
     unsigned long anchormasks[MAXPATLEN],
-    				varpool[MAXPATLEN], pmask;
+    		  varpool[MAXPATLEN], 
+		  pmask;
     int vlen, plen, wildfloats, vtot;
-    int matchtype, mincnt, maxcnt, minlen, maxlen, idx;
+    int matchtype, mincnt, maxcnt, minlen, maxlen; //, idx;
     int numlens, lennow, wlen[32], vpos[32];
     char lastmulti[80];
     int progpoint;
@@ -58,6 +59,8 @@ class DictionaryDatabase
 #endif
 
   public:
+    static const char *MatchTypeName(UInt t);
+    static const char *LimitName(UInt n);
     unsigned long LetterMask(char c)
     {
         return (1ul << (c-'A'));
@@ -66,9 +69,9 @@ class DictionaryDatabase
     {
         unsigned long v;
 
-	    DictionaryNode(unsigned long v_in = 0)
-	    	: v(v_in)
-	    { }
+	DictionaryNode(unsigned long v_in = 0)
+	    : v(v_in)
+	{ }
         inline int IsTerminal() const
         {
             return (int)((v>>TVSH)&1);
@@ -122,8 +125,8 @@ class DictionaryDatabase
 #endif
     int current_recnum;
 
-    int FindPoolAllocation(int pos, int tot, int wilds,
-						unsigned long pmask = 0xfffffffful);
+    int FindPoolAllocation(unsigned pos, int tot, int wilds,
+			   unsigned long pmask = 0xfffffffful);
     int RemoveFromPool(int c);
     void ReplaceInPool(int c);
     int GrabLetter(DictionaryNode &n);
@@ -134,13 +137,13 @@ class DictionaryDatabase
     int NextSingleWordAllLettersStep(char *line);
     int NextStep(char *line);
     DictionaryNode GetNode(unsigned long n);
-    int MustStop();
+    virtual int MustStop();
   public:
     int StartConsult(char *pat, int type_in = USEALL,
     			int multi_in = 0,
     			int minlen_in=0, int maxlen_in=0, 
 			int mincnt_in=0, int maxcnt_in=0);
-    int NextMatch(char *line);
+    int NextMatch(char *line, int len);
     void Reset();
     inline int Matches() const
     {
@@ -164,7 +167,7 @@ class DictionaryDatabase
 #else
     DictionaryDatabase(class Form *owner_in);
 #endif
-    ~DictionaryDatabase();
+    virtual ~DictionaryDatabase();
 };
 
 #endif

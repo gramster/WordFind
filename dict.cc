@@ -1,25 +1,100 @@
-#ifdef TEST
-#include <stdio.h>
+#include "mypilot.h"
 
-typedef unsigned short UInt;
-typedef unsigned short Boolean;
-#else
-#ifdef __cplusplus
-extern "C" {
-#endif
-#include <Pilot.h>
-#include <Graffiti.h>
-#include <SysEvtMgr.h>
-#ifdef __cplusplus
-}
+#ifndef TEST
 #include "ptrsc.h"
+#include "fw.h"
 #endif
 
-#include "fw.h"
 #include "dict.h"
-#endif // TEST
 
-char *MatchTypeName(UInt t)
+#ifdef TEST
+DictionaryDatabase::DictionaryDatabase() :
+#else
+DictionaryDatabase::DictionaryDatabase(class Form *owner_in) :
+      Database(),
+      owner(owner_in),
+#endif
+      current_record(0),
+      current_recnum(-1),
+      sp(0),
+      start(0),
+      laststart(0),
+      stop(0),
+      vecoff(0),
+      swcnt(0),
+      stepnum(0),
+      matches(0),
+      progress(0),
+      pmask(0),
+      vlen(0),
+      plen(0),
+      wildfloats(0),
+      vtot(0),
+      matchtype(0),
+      mincnt(0),
+      maxcnt(0),
+      minlen(0),
+      maxlen(0),
+      //idx;
+      numlens(0),
+      lennow(0),
+      progpoint(0),
+      has_float_ranges(0),
+      has_place_constraints(0)
+
+{
+    memset((char*)allocpool, 0, sizeof(allocpool[0])*26);
+    memset((char*)fixedpool, 0, sizeof(fixedpool[0])*26);
+    memset((char*)maxpool, 0, sizeof(maxpool[0])*26);
+    memset((char*)need, 0, sizeof(need[0])*26);
+    memset((char*)nstk, 0, sizeof(nstk[0])*30);
+    memset((char*)starts, 0, sizeof(starts[0])*32);
+    memset((char*)anchormasks, 0, sizeof(anchormasks[0])*MAXPATLEN);
+    memset((char*)varpool, 0, sizeof(varpool[0])*MAXPATLEN);
+    memset((char*)wlen, 0, sizeof(wlen[0])*32);
+    memset((char*)vpos, 0, sizeof(vpos[0])*32);
+    memset((char*)lastmulti, 0, sizeof(lastmulti[0])*32);
+
+    // open the database
+    (void)Open();
+#ifdef TEST
+    if (fp)
+#else
+    if (db)
+#endif
+    {
+#ifdef TEST
+	nodesize = 4;
+        current_record = new unsigned char[NodesPerRecord*4];
+#else
+        VoidHand h = QueryRecord(0);
+        if (h)
+        {
+	    unsigned char *lp = (unsigned char*)MemHandleLock(h);
+	    if (lp)
+	    {
+	        if (lp[2]==3)
+	            nodesize = 3;
+	        else
+	            nodesize = 4;
+	    }
+            MemHandleUnlock(h);
+        }
+#endif
+    }
+}
+
+DictionaryDatabase::~DictionaryDatabase()
+{
+    if (current_record) 
+#ifdef TEST
+        delete [] current_record;
+#else
+        MemHandleUnlock(current_handle);
+#endif
+}
+
+const char *DictionaryDatabase::MatchTypeName(UInt t)
 {
     switch(t)
     {
@@ -29,7 +104,7 @@ char *MatchTypeName(UInt t)
     }
 }
 
-char *LimitName(UInt n)
+const char *DictionaryDatabase::LimitName(UInt n)
 {
     static char b[3];
     if (n > 0)
@@ -49,53 +124,6 @@ char *LimitName(UInt n)
         }
     }
     return "Any";
-}
-
-#ifdef TEST
-DictionaryDatabase::DictionaryDatabase() :
-#else
-DictionaryDatabase::DictionaryDatabase(class Form *owner_in) :
-      Database(),
-      owner(owner_in),
-#endif
-      current_record(0),
-      current_recnum(-1),
-      progpoint(0)
-{
-    // open the database
-    (void)Open();
-#ifdef TEST
-    if (fp)
-#else
-    if (db)
-#endif
-    {
-#ifdef TEST
-	nodesize = 4;
-        current_record = new unsigned char[NodesPerRecord*4];
-#else
-        VoidHand h = DmQueryRecord(db, (UInt)0);
-        if (h)
-        {
-	    unsigned char *lp = (unsigned char*)MemHandleLock(h);
-	    if (lp[2]==3)
-	        nodesize = 3;
-	    else
-	        nodesize = 4;
-            MemHandleUnlock(h);
-        }
-#endif
-    }
-}
-
-DictionaryDatabase::~DictionaryDatabase()
-{
-    if (current_record) 
-#ifdef TEST
-        delete [] current_record;
-#else
-        MemHandleUnlock(current_handle);
-#endif
 }
 
 DictionaryDatabase::DictionaryNode
@@ -121,8 +149,8 @@ DictionaryDatabase::DictionaryNode
                 
         // Fetch and lock the `rn'th record
             
-        current_handle = db ? DmQueryRecord(db, (UInt)rn) : 0;
-        if (current_handle) // CHECK THIS!
+        current_handle = db ? QueryRecord((UInt)rn) : 0;
+        if (current_handle)
         {
 	    current_record = 
             	(unsigned char*)MemHandleLock(current_handle);
@@ -140,9 +168,9 @@ DictionaryDatabase::DictionaryNode
         v = 0;
     else 
     {
-        unsigned char *dp = current_record+(n%NodesPerRecord)*nodesize;
         if (nodesize == 3)
 	{
+	    unsigned char *dp = current_record+(n%NodesPerRecord)*3;
             v = (dp[0]&0xFE);
             v = (v<<8) | (dp[0]&0x1);
             v = (v<<8) | dp[1];
@@ -150,6 +178,7 @@ DictionaryDatabase::DictionaryNode
 	}
 	else
 	{
+	    unsigned char *dp = current_record+(n%NodesPerRecord)*4;
             v = *((unsigned long*)(dp));
 	}
     }
@@ -279,7 +308,7 @@ char *DictionaryDatabase::NextPat(char *pat, int pos)
     				// (i.e. unsigned long bitmask).
 }
 
-int DictionaryDatabase::FindPoolAllocation(int pos, int tot, int wilds,
+int DictionaryDatabase::FindPoolAllocation(unsigned pos, int tot, int wilds,
 						unsigned long pmask)
 {
     if (tot<=wilds) return 0;
@@ -372,9 +401,8 @@ void DictionaryDatabase::InitStack(int l, int first_vec)
     vecoff = first_vec;
     swcnt = 1;
     vtot = 0;
-    for (int i = 0; i < 26; i++)
-        need[i] = 0;
-    starts[0] = starts[1] = 0;
+    memset((char*)need, 0, sizeof(need[0])*26);
+    memset((char*)starts, 0, sizeof(starts[0])*32);
 }
 
 int DictionaryDatabase::StartConsult(char *pat,
@@ -397,11 +425,11 @@ int DictionaryDatabase::StartConsult(char *pat,
 	if (db == 0) return -1;
     }
 #endif
-    for (int i = 0; i < 26; i++)
-        allocpool[i] = fixedpool[i] = maxpool[i] = 0;
-    vlen = plen = wildfloats = 0;
+    memset((char*)allocpool, 0, sizeof(allocpool[0])*26);
+    memset((char*)fixedpool, 0, sizeof(fixedpool[0])*26);
+    memset((char*)maxpool, 0, sizeof(maxpool[0])*26);
+    vlen = plen = wildfloats = has_float_ranges = 0;
     int px = 0;
-    has_float_ranges = 0;
     while (pat && *pat) pat = NextPat(pat, px++);
     if (!has_float_ranges)
     {
@@ -410,7 +438,7 @@ int DictionaryDatabase::StartConsult(char *pat,
 	{
 	    for (int i = 0; i < vlen; i++)
 	    {
-	        if (anchormasks[i]==0)
+	        if (anchormasks[i]==0ul)
 		{
 		    anchormasks[i] = ALL;
 		    --wildfloats;
@@ -421,7 +449,7 @@ int DictionaryDatabase::StartConsult(char *pat,
     has_place_constraints = 0;
     for (int i = 0; i < vlen; i++)
     {
-        if (anchormasks[i] != 0)
+        if (anchormasks[i] != 0ul)
 	{
 	    has_place_constraints = 1;
 	    break;
@@ -442,7 +470,7 @@ int DictionaryDatabase::StartConsult(char *pat,
         maxcnt = vlen;
     // match=0;
     lastmulti[0] = 0;
-    pmask = 0l;
+    pmask = 0ul;
     for (int i = 0; i < plen; i++)
         pmask |= (1ul << i);
     switch(matchtype)
@@ -496,13 +524,13 @@ void DictionaryDatabase::GetWord(char *word, int stacklen)
     int j = 0;
     for (int i = 0; i<=stacklen; i++)
     {
-	    if (i && nstk[i] <= 26)
-	    {
-	        word[j++] = ' ';
-	        word[j++] = ' ';
-	    }
+	if (i && nstk[i] <= 26)
+	{
+	    word[j++] = ' ';
+	    word[j++] = ' ';
+	}
         DictionaryNode n = Nstk[i];
-	    word[j++] = n.Char();
+	word[j++] = n.Char();
     }
     word[j] = 0;
 }
@@ -510,14 +538,7 @@ void DictionaryDatabase::GetWord(char *word, int stacklen)
 
 int DictionaryDatabase::MustStop()
 {
-#ifdef TEST
     return 0;
-#else
-    short x, y;
-    Boolean pendown;
-    EvtGetPen(&x, &y, &pendown);
-    return (pendown && x>120 && y > 143);
-#endif
 }
 
 // iTERATIVE IMPLEMENTATION OF RECURSIVE SEARCH
@@ -651,7 +672,7 @@ int DictionaryDatabase::NextStep(char *line)
 	{
 	    if (sp == (progpoint+1))
 	    {
-		    DictionaryNode n = Nstk[progpoint];
+		DictionaryNode n = Nstk[progpoint];
 	        int p;
 		if (numlens == 1)
 		    p = ((n.Index()*26+N.Index()))/6;
@@ -700,9 +721,13 @@ int DictionaryDatabase::NextStep(char *line)
     return -1; // no more
 }
 
-int DictionaryDatabase::NextMatch(char *line)
+extern void DrawDebugText(int, int, const char*);
+long cnt = 0;
+
+int DictionaryDatabase::NextMatch(char *line, int len)
 {
-#if 1
+    if (maxlen >= len) maxlen = len-1; // avoid overruns
+#if 1 // set to 0 for low level dict testing
     // this could all be handled by one case, but for 
     // speed efficiency we handle the single word 
     // USEALL case separately...
@@ -711,6 +736,7 @@ int DictionaryDatabase::NextMatch(char *line)
     {
         for (;;)
         {
+//	    DrawDebugText(100, 2, ltoa(++cnt));
     	    int x = NextSingleWordAllLettersStep(line);
     	    if (x < 0)
     	        return x;
@@ -722,6 +748,7 @@ int DictionaryDatabase::NextMatch(char *line)
     {
         for (;;)
         {
+//	    ::DrawDebugText(100, 2, ltoa(++cnt));
     	    int x = NextStep(line);
     	    if ( x == -2) return -2;
 	        else if (x < 0)
@@ -755,8 +782,7 @@ int DictionaryDatabase::NextMatch(char *line)
 
 void DictionaryDatabase::Reset()
 {
-    for (int i = 0; i < 26; i++)
-        allocpool[i] = 0;
+    memset((char*)allocpool, 0, sizeof(allocpool[0])*26);
     lastmulti[0] = 0;
     pmask = 0l;
     for (int i = 0; i < plen; i++)
@@ -765,3 +791,5 @@ void DictionaryDatabase::Reset()
     InitStack(wlen[lennow], vpos[lennow]);
 }
 
+
+
