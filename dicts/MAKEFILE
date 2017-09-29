@@ -1,0 +1,34 @@
+default: dictmgr.exe
+
+all: dictmgr.exe dicts
+
+dicts: demo.pdb ospd3.pdb small.pdb medium.pdb large.pdb scrabtor.pdb huge.pdb
+
+dictmgr.exe: dictmgr.cc
+	bcc32 -P -O -I../common dictmgr.cc
+
+demo.pdb : demo.txt
+	dictmgr -S -n "Trial" -F 0 -o demo.pdb demo.txt
+
+ospd3.pdb : ospd3.txt
+	dictmgr -S -n "OSPD3" -F 2 -o ospd3.pdb ospd3.txt
+
+small.pdb : small.txt
+	dictmgr -S -n "Small" -F 1 -o small.pdb small.txt
+
+medium.pdb : medium.txt
+	dictmgr -S -n "Medium" -F 2 -o medium.pdb medium.txt
+
+large.pdb : large.txt
+	dictmgr -S -n "Large" -F 1 -o large.pdb large.txt
+
+huge.pdb : huge.txt
+	dictmgr -S -n "Huge" -F 3 -o huge.pdb huge.txt
+
+scrabtor.pdb : scrabtor.txt
+	dictmgr -S -n "Scrabble Tournament" -F 3 -o scrabtor.pdb scrabtor.txt
+
+test.pdb : test.txt
+	dictmgr -S -n "test" -F 3 -o test.pdb test.txt
+
+

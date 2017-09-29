@@ -1,0 +1,34 @@
+Try to find the Scrabble tournament dictionary.
+
+Document common probs/known bugs.
+
+Try to:
+
+Find why it crashes the system if both PW++ and PWPro are installed (if 
+it still does)
+
+Beta test.
+
+Package and upload.
+
+=========
+2001
+
+Clean up the Main Form layout - move Word Lengths and Counts back to two lines, create some 
+more shortcut boxes at the bottom for Regexp chars, and remove the Dictionary trigger. Make
+the dictionary selection work from the Menu instead (and maybe add a menu option to see
+info about the current dictionary; full name, size, creation date, etc).
+
+Then use the space freed by the dictionary line to create a RegExp text field, Clear button
+and History popup, and implement these. Rename the Pattern field `Template'.
+
+
+
+
+
+
+
+
+
+
+

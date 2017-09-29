@@ -10,14 +10,10 @@
 #include <assert.h>
 #include <ctype.h>
 #include <time.h>
-//#include <search.h>
 
 //int debug = 0;
 
 #define DUMP
-#define DICTMGR
-
-#include "regex.cc"
 #include "dict.cc"
 
 void StrUpr(char *s)
@@ -42,44 +38,6 @@ int cmpstr(char *s1, char *s2) // s2 should come before in sort
 
 //----------------------------------------------------------------------
 
-// The self member has a FREE bit, a TERMINAL bit, and 5 bits
-// for the character. That leaves 25 bits. To speed up node
-// compares (by reducing memcmps of the 26 children) we map the
-// set of child letters into 22 of these bits, and the height of
-// the subtree into 3 (we store (height&7)).
-// To speed up the mapping of the 26 letters into 20 bits,
-// we use this table:
-
-static unsigned long lmasks[26] = 
-{
-    0x00000020ul, // A
-    0x00000040ul, // B
-    0x00000080ul, // C
-    0x00000100ul, // D
-    0x00000200ul, // E
-    0x00000400ul, // F
-    0x00000800ul, // G
-    0x00001000ul, // H
-    0x00002000ul, // I
-    0x00000040ul, // J shares with B
-    0x00004000ul, // K
-    0x00008000ul, // L
-    0x00010000ul, // M
-    0x00020000ul, // N
-    0x00040000ul, // O
-    0x00080000ul, // P
-    0x00004000ul, // Q shares with K
-    0x00100000ul, // R
-    0x00200000ul, // S
-    0x00400000ul, // T
-    0x00800000ul, // U
-    0x01000000ul, // V
-    0x02000000ul, // W
-    0x04000000ul, // X shares with Y and Z
-    0x04000000ul, // Y
-    0x04000000ul  // Z
-};
-
 class Node
 {
   protected:
@@ -91,25 +49,12 @@ class Node
 #define FREE		0x80000000u
 #define TERMINAL	0x40000000u
 #endif
-#ifdef USE_BITFIELDS
-    unsigned free:1;
-    unsigned terminal:1;
-    unsigned depth:3;
-    unsigned chmask:22;
-    unsigned chidx:5;
-#else
     unsigned long self;
-#endif
-
     int children[26];	// indices of child nodes
   public:
-    inline void Clear(int chidx_in = 0)
+    inline void Clear(int chidx = 0)
     {
-#ifdef USE_BITFIELDS
-        chidx = chidx_in;
-#else
-	self = (chidx_in&0x1f);
-#endif
+	self = chidx;
 	memset(children, 0, 26 * sizeof(children[0]));
     }
     inline Node()
@@ -120,109 +65,39 @@ class Node
     {}
     inline int IsFree() const
     {
-#ifdef USE_BITFIELDS
-	return free;
-#else
 	return (self & FREE) != 0;
-#endif
     }
     inline int IsUsed() const
     {
-#ifdef USE_BITFIELDS
-	return (free == 0);
-#else
 	return (self & FREE) == 0;
-#endif
     }
     inline void SetFree()
     {
-#ifdef USE_BITFIELDS
-	free = 1;
-#else
 	self |= FREE;
-#endif
     }
     inline void SetUsed()
     {
-#ifdef USE_BITFIELDS
-	free = 0;
-#else
 	self &= ~FREE;
-#endif
     }
     inline int IsTerminal() const
     {
-#ifdef USE_BITFIELDS
-	return terminal;
-#else
 	return (self & TERMINAL) != 0;
-#endif
     }
     inline void SetTerminal()
     {
-#ifdef USE_BITFIELDS
-	terminal = 1;
-#else
 	self |= TERMINAL;
-#endif
     }
-    inline int Index() const
+    inline int Value() const
     {
-#ifdef USE_BITFIELDS
-	return chidx;
-#else
-	return self&0x1f;
-#endif
+	return (self & (~(FREE|TERMINAL)));
     }
-    inline unsigned long ChildMask() const
-    {
-#ifdef USE_BITFIELDS
-	return chmask;
-#else
-        return (self & 0x07ffffe0ul);
-#endif
-    }
-    inline unsigned long LengthMask() const
-    {
-#ifdef USE_BITFIELDS
-	return depth;
-#else
-        return (self & 0x38000000ul);
-#endif
-    }
-    inline void NoteDepth(int depth_in)
-    {
-#ifdef USE_BITFIELDS
-	depth = depth_in&7;
-#else
-	self |= (((unsigned long)depth_in)&7)<<27;
-#endif
-    }
-    inline void SetChild(int chidx, int childnode)
-    {
-#ifdef USE_BITFIELDS
-	chmask |= 1ul<<chidx;
-#else
-	self |= lmasks[chidx];
-        children[chidx] = childnode;
-#endif
-    }
+    //inline void SetValue(unsigned v)
+    //{
+	//self = (self&(FREE|TERMINAL)) | (v & (~(FREE|TERMINAL)));
+    //}
     inline void ChainFree(unsigned nextfree)
     {
-#ifdef USE_BITFIELDS
-	free = 1;
-	chmask = nextfree;
-#else
 	self = FREE|nextfree;
-#endif
-    }
-    inline int NextFree() const
-    {
-#ifdef USE_BITFIELDS
-	return chmask;
-#else
-        return self & ~(FREE|TERMINAL);
-#endif
     }
     void Print(FILE *fp);
     int LastChild() const;
@@ -232,8 +107,7 @@ class Node
 void Node::Print(FILE *fp)
 {
     if (IsTerminal()) fprintf(fp, "Terminal ");
-    fprintf(fp, "Node %c (chmask %lX, dmask %lX)\n",
-		Index()+'A', ChildMask(), LengthMask());
+    fprintf(fp, "Node\n");
     for (int j=0; j<26; j++)
     {
 	if (children[j])
@@ -301,24 +175,16 @@ class NodePool
     }
     void PrintGraph(FILE *fp);
     void WriteNode(FILE *fp, int n);
-    void CheckOptimality();
     void WriteDawg(FILE *fp);
     void WritePalmDB(FILE *fp, unsigned long nnodes,
     			const char *name = 0,
-			const char *srcname = 0,
-			int progid = 0);
+			const char *srcname = 0);
     void AddWord(char *word, int pos);
     void FreeNode(int n);
     int MergeNodes(int first, int last, int n, int parent);
     inline unsigned int NodeCompare(int n1, int n2) const
     {
-#ifdef USE_BITFIELDS
-	return (node[n1].chmask == node[n2].chmask &&
-	        node[n1].chidx == node[n2].chidx &&
-	        node[n1].terminal == node[n2].terminal &&
-#else
 	return (node[n1].self == node[n2].self &&
-#endif
 		memcmp(node[n1].children,node[n2].children, 26*sizeof(int))==0);
     }
     inline int MergeNodes(int i)
@@ -343,6 +209,9 @@ class NodePool
 		(double)topnode*100./(double)MAXNODES);
 #endif
     }
+    void SaveState(char *word, char *lastword);
+    int RestoreState(char *word, char *lastword);
+
 };
 
 void NodePool::Init() // was Setup
@@ -368,7 +237,7 @@ int NodePool::AllocateNode(int chidx)
     }
     int i = botnode;
     if (i>topnode) topnode = i;
-    botnode = node[i].NextFree();
+    botnode = node[i].Value();
     node[i].Clear(chidx);
     --freenodes;
     return i;
@@ -441,23 +310,6 @@ void NodePool::WriteNode(FILE *fp, int n)
     }
 }
 
-void NodePool::CheckOptimality()
-{
-    unsigned mask = 0;
-    for (int i=0; i<=topnode; i++)
-    {
-        if (node[i].IsUsed() && node[i].ChildMask()==0)
-	{
-	    int chidx = node[i].Index();
-	    unsigned long v = 1ul << chidx;
-	    if ((mask & v) != 0)
-	        fprintf(stderr, "Duplicate leaf for %c\n", 'A'+chidx);
-	    mask |= v; 
-	}
-    }
-    fprintf(stderr, "Optimality mask %lX (expect 3FFFFFF)\n", mask);
-}
-
 unsigned long NodePool::IndexNodes()
 {
     long idx = 1;
@@ -491,8 +343,7 @@ void NodePool::WriteDawg(FILE *fp)
 void NodePool::WritePalmDB(FILE *dawg,
 				unsigned long nnodes,
 				const char *name,
-				const char *srcname,
-				int progid)
+				const char *srcname)
 {
     char nbuf[32];
     if (name==0) name = srcname;
@@ -588,7 +439,6 @@ void NodePool::WritePalmDB(FILE *dawg,
     // (78+8*nrecs+NodesPerRecord*4), ...
 
     int nodesize = (nnodes>=0x1FFFFul) ? 4 : 3; // 3 = packed demo dict
-//fprintf(stderr, "nodesize %d \n", nodesize);
     unsigned long record_offset = ftell(dawg) + 8*nrecs;
     for (int i = 0; i < nrecs; i++)
     {
@@ -608,9 +458,11 @@ void NodePool::WritePalmDB(FILE *dawg,
 
     // now write out the nodes
 
-    longbuf[0] = (nodesize)&0xFF;
-    longbuf[1] = progid; //0=demo; 1=lite;2=++;3=pro
-    fwrite(longbuf, sizeof(char), nodesize, dawg);
+    longbuf[0] = 0;
+    longbuf[1] = 0;
+    longbuf[2] = 0;
+    longbuf[3] = (nodesize)&0xFF;
+    fwrite(longbuf+4-nodesize, sizeof(char), nodesize, dawg);
 
     unsigned long n, nn = 1;
 
@@ -625,12 +477,12 @@ void NodePool::WritePalmDB(FILE *dawg,
             {
     	        unsigned  long v = (unsigned long)index[ch];
     	        if (node[ch].IsTerminal())
-    	            v |= (1ul << TVSH);
+    	            v |= 0x40000000l;
     	        if (j==last)
-    	            v |= (1ul << PVSH);
-    	        v |= ((unsigned long)(j+IDLT))<<IVSH;
+    	            v |= 0x80000000l;
+    	        v |= ((unsigned long)j)<<25;
 		longbuf[0] = (v>>24)&0xFF;
-		if (nodesize == 3)
+		if (nnodes < (128l*1024l))
 		{
 		    longbuf[0] |= (v>>16)&0x01;
 		    longbuf[1] = (v>>8)&0xFF;
@@ -664,6 +516,8 @@ void NodePool::WritePalmDB(FILE *dawg,
 				longbuf[2],
 				longbuf[3]);
 		}
+#if 1
+#endif
 		fwrite(longbuf, sizeof(char), nodesize, dawg);
 	    }
 	}
@@ -687,14 +541,10 @@ void NodePool::AddWord(char *word, int pos)
         printf("%d: %-16s Free %d\n", ++wcnt, word, freenodes);
     else
         printf("%d: %-16s\n", ++wcnt, word);
-    int l = strlen(word);
     while (word[pos])
     {
         int j = word[pos] - 'A';
-        int nd = AllocateNode(j);
-	node[n].SetChild(j, nd);
-	node[n].NoteDepth(l - pos);
-        nodestack[++pos] = n = nd;
+        nodestack[++pos] = n = (node[n].children[j] = AllocateNode(j));
     }
     node[n].SetTerminal();
     stacktop = pos;
@@ -715,7 +565,7 @@ int NodePool::MergeNodes(int first, int last, int n, int parent)
     {
         if (NodeCompare(i, n))
         {
-    	    int chidx = node[n].Index();
+    	    int chidx = node[n].Value();
     	    node[parent].children[chidx] = i;
     	    FreeNode(n);
     	    return 1;
@@ -727,26 +577,75 @@ int NodePool::MergeNodes(int first, int last, int n, int parent)
 void NodePool::Merge(int pos)
 {
     int i = stacktop;
-    while (i>pos)
+    while (i>pos) MergeNodes(i--);
+}
+
+void NodePool::SaveState(char *word, char *lastword)
+{
+    int i;
+    FILE *stf = fopen("buildict.tmp", "w");
+    if (stf == 0)
     {
-	MergeNodes(i);
-	i--;
+        fprintf(stderr, "Can't open state file\n");
+        return;
     }
+    fwrite(&botnode, sizeof(botnode), 1, stf);
+    fwrite(&topnode, sizeof(topnode), 1, stf);
+    fwrite(&freenodes, sizeof(freenodes), 1, stf);
+    fwrite(&usednodes, sizeof(usednodes), 1, stf);
+    fwrite(word, sizeof(char), MAXLEN+1, stf);
+    fwrite(lastword, sizeof(char), MAXLEN+1, stf);
+    fwrite(&wcnt, sizeof(wcnt), 1, stf);
+    fwrite(&stacktop, sizeof(stacktop), 1, stf);
+    fwrite(nodestack, sizeof(int), stacktop+1, stf);
+    for (i = 0; i <= topnode; i++)
+        fwrite(node+i, sizeof(Node), 1, stf);
+    fwrite(index, sizeof(int), topnode+1, stf);
+    fclose(stf);
+    fprintf(stderr, "Saved state; resume with the -R flag\n");
+}
+
+int NodePool::RestoreState(char *word, char *lastword)
+{
+    int i;
+    FILE *stf = fopen("buildict.tmp", "r");
+    fprintf(stderr, "Restoring state...\n");
+    if (stf == 0)
+    {
+        fprintf(stderr, "Can't open state file\n");
+        exit(-1);
+    }
+    fread(&botnode, sizeof(botnode), 1, stf);
+    fread(&topnode, sizeof(topnode), 1, stf);
+    fread(&freenodes, sizeof(freenodes), 1, stf);
+    fread(&usednodes, sizeof(usednodes), 1, stf);
+    fread(word, sizeof(char), MAXLEN+1, stf);
+    fread(lastword, sizeof(char), MAXLEN+1, stf);
+    fread(&wcnt, sizeof(wcnt), 1, stf);
+    fread(&stacktop, sizeof(stacktop), 1, stf);
+    fprintf(stderr, "Bot %d Top %d Free %d Used %d Cnt %d Stk %d Wrd %s\n",
+    	botnode, topnode, freenodes, usednodes,
+    	wcnt, stacktop, lastword);
+    fread(nodestack, sizeof(int), stacktop+1, stf);
+    for (i = 0; i <= topnode; i++)
+        fread(node+i, sizeof(Node), 1, stf);
+    fread(index, sizeof(int), topnode+1, stf);
+    fclose(stf);
+    return wcnt;
 }
 
 static void useage(void)
 {
-    fprintf(stderr,"Usage: dictmgr [-S] [-n <name>] [-m <minlen>] [-M <maxlen>] [-o <OPDB>] [<IWL> ...] (build dictionary)\n");
-    fprintf(stderr,"or:    dictmgr -d [-o <OWL>] <IPDB>  (dump dictionary)\n");
+    fprintf(stderr,"Usage: dictmgr [-n <name>] [-m <minlen>] [-M <maxlen>] [-o <OPDB>] [<IWL> ...] (build dictionary)\n");
+    fprintf(stderr,"or:    dictmgr -l [-o <OWL>] <IPDB>  (list dictionary)\n");
+    fprintf(stderr,"or:    dictmgr -S <IWL>  (check sort order)\n");
 //    fprintf(stderr,"or:    dictmgr -R <EmailAddress>] <HotSyncName>  (register programs)\n");
-    fprintf(stderr,"or:    dictmgr -? <pattern> [-t All|Prefix|Suffix] [-l <minlen>] [-L <maxlen>] [-Multi] [-W <maxwords>] [-w <minwords>] [<PDB>] (search)\n");
     fprintf(stderr,"\n\nIPDB and OPDB represent input and output .pdb dictionary databases.\n");
     fprintf(stderr,"IWL and OWL represent input and output word list files.\n");
     fprintf(stderr,"\n\nIf no word list file is specified for building, standard input is used.\n");
     fprintf(stderr,"If no output file is specified for building, pw.pdb is used.\n");
     fprintf(stderr,"If no output file is specified for listing, standard output is used.\n");
-    fprintf(stderr,"Input word lists must be free of punctuation.\n");
-    fprintf(stderr,"If they are already sorted, use -S to speed up the loading of the words.\n");
+    fprintf(stderr,"Input word lists must be sorted and be free of punctuation.\n");
     fprintf(stderr,"Multiple word lists can be specified when building, and they will be\n");
     fprintf(stderr,"merged. The -m and -M flags allow you to select which subset of words\n");
     fprintf(stderr,"should be included based on word length restrictions.\n");
@@ -757,12 +656,17 @@ static void useage(void)
     exit(0);
 }
 
+static void HandleSignal(int);
+typedef void (*handler)(int);
+
+int must_abort = 0;
+
 void Dump(int dumplevel, const char *ofname, const char *fname = 0)
 {
     FILE *fp = 0;
     if (ofname) fp = fopen(ofname, "w");
-    DictionaryDatabase dict(fname);
-//    dict.Init(fname);
+    DictionaryDatabase dict;
+    dict.Init(fname);
     dict.InitDB();
     if (dumplevel>1)
         dict.RawDump(fp ? fp : stdout);
@@ -771,59 +675,6 @@ void Dump(int dumplevel, const char *ofname, const char *fname = 0)
     if (fp) fclose(fp);
     if (gncnt && debug)
         printf("GetNode %lu  Cache Hits: %02d%%\n", gncnt, ((gncnt-dbcnt)*100ul)/gncnt);
-}
-
-void Consult(char *pattern, 
-			int type_in,
-			int multi_in = 0,
-			int minlen_in = 0,
-			int maxlen_in = 0,
-			int mincnt_in = 0,
-			int maxcnt_in = 0,
-			const char *ofname = 0,
-			const char *fname = 0)
-{
-    DictionaryDatabase dict(fname);
-//    dict.Init(fname);
-    if (dict.InitDB() == 0)
-    {
-        if (dict.StartConsult(pattern, type_in, multi_in, minlen_in, maxlen_in, mincnt_in, maxcnt_in) == 0)
-        {
-            FILE *fp = ofname ? fopen(ofname, "w") : 0;
-            char line[80];
-            while (dict.NextMatch(line, sizeof(line)) >= 0)
-	    {
-                if (fp) fprintf(fp, "%s\n", line);
-	        else puts(line);
-	    }
-            if (fp) fclose(fp);
-	}
-	else fprintf(stderr, "Invalid search pattern %s\n", pattern);
-    }
-    else fprintf(stderr, "Cannot initialise dictionary %s\n", fname);
-}
-
-void REConsult(char *regexp, 
-			const char *ofname = 0,
-			const char *fname = 0)
-{
-    DictionaryDatabase dict(fname);
-    if (dict.InitDB() == 0)
-    {
-        if (dict.StartREConsult(regexp) == 0)
-        {
-            FILE *fp = ofname ? fopen(ofname, "w") : 0;
-            char line[80];
-            while (dict.NextREMatch(line, sizeof(line)) >= 0)
-	    {
-                if (fp) fprintf(fp, "%s\n", line);
-	        else puts(line);
-	    }
-            if (fp) fclose(fp);
-	}
-	else fprintf(stderr, "Invalid regular expression %s\n", regexp);
-    }
-    else fprintf(stderr, "Cannot initialise dictionary %s\n", fname);
 }
 
 // Get the next line in alpha order from a set of open files
@@ -836,30 +687,12 @@ void REConsult(char *regexp,
 //      This must also be able to build merged word lists and
 //	merge the categories, which may change things.
 
-static int first = 1;
-static char wordbuffers[16][MAXLINELEN] = { { 0 } };
-static int wordlines[16] = { 0 };
-int load_from_disk = 0, must_sort = 0;
-
-void ResetFiles(char **filename, FILE **lex)
-{
-    first = 1;
-    for (int i = 0; i < 16; i++)
-    {
-       if (lex[i])
-           rewind(lex[i]);
-	else if (filename[i])
-	    lex[i] = fopen(filename[i], "r");
-	wordbuffers[i][0] = 0;
-	wordlines[i] = 0;
-    }
-}
-
-int GetLine(char *wordbuf, FILE **lex, char **filename, const char *categories,
-			int minlength, int maxlength)
+int GetLine(char *wordbuf, FILE **lex, char **filename, const char *categories)
 {
     (void)categories; // not implemented yet
-    int best, skip, rtn = -1;
+    int best, dup;
+    static int first = 1;
+    static char wordbuffers[16][MAXLINELEN] = { { 0 } };
     if (first)
     {
         for (int i = 0; i < 16; i++)
@@ -872,22 +705,15 @@ int GetLine(char *wordbuf, FILE **lex, char **filename, const char *categories,
 	        fclose(lex[i]);
 	        lex[i] = 0;
 	    }
-	    else
-	    {
-		++wordlines[i];
-		StrUpr(wordbuffers[i]);
-	    }
+	    else StrUpr(wordbuffers[i]);
 	}
 	first = 0;
     }
-    wordbuf[0] = 0;
   retry:
-    best = skip = 0;
+    best = dup = 0;
     while (wordbuffers[best][0]==0) ++best;
-    if (best >= 16)
-    {
-	return -1;
-    }
+    if (best >= 16) return -1;
+//printf("Choosing from:\n\t%s\n", wordbuffers[best]);
     for (int i = best+1; i < 16; i++)
     {    
 //if (wordbuffers[i][0])
@@ -895,36 +721,29 @@ int GetLine(char *wordbuf, FILE **lex, char **filename, const char *categories,
         if (wordbuffers[i][0] && strcmp(wordbuffers[best], wordbuffers[i])>0)
 	    best = i;
     }
+//printf("Best: %s\n\n", wordbuffers[best]);
 #ifdef CATEGORIES
     char *cat = wordbuffers[best];
     while (*cat && isalpha(*cat)) ++cat;
-    int l = cat-wordbuffers[best], x = 0;
+    int l = cat-wordbuffers[best]-1;
     if (isspace(*cat))
     {
         while (isspace(*cat)) ++cat;
     }
     else cat = 0;
 #else
-    int l = strlen(wordbuffers[best]), x = 0;
+    int l = strlen(wordbuffers[best])-1;
 #endif
-    while (l>0 && (wordbuffers[best][l-1]<'A' || wordbuffers[best][l-1]>'Z'))
-        --l;
-    wordbuffers[best][l] = 0;
-    if (l) x = strcmp(wordbuf, wordbuffers[best]);
-    if (x == 0) skip = 1; // duplicate or empty
+    while (l>0 && (wordbuffers[best][l]<'A' || wordbuffers[best][l]>'Z'))
+        l--;
+    wordbuffers[best][l+1] = 0;
+    int x = strcmp(wordbuf, wordbuffers[best]);
+    if (x == 0) dup = 1;
     else if (x > 0)
     {
-        if (load_from_disk)
-	{
-            printf("Skipping out-of-order word `%s' in file %s, line %d\n",
-      		wordbuffers[best], filename[best], wordlines[best]);
-	    skip = 1;
-	}
-	else
-	{
-	    must_sort = 1;
-            strcpy(wordbuf, wordbuffers[best]);
-	}
+        printf("Skipping out-of-order word %s in file %s\n",
+		wordbuffers[best], filename[best]);
+	dup = 1;
     }
     else strcpy(wordbuf, wordbuffers[best]);
     if (feof(lex[best]) || fgets(wordbuffers[best], MAXLINELEN, lex[best])==0)
@@ -932,30 +751,10 @@ int GetLine(char *wordbuf, FILE **lex, char **filename, const char *categories,
 	wordbuffers[best][0] = 0;
 	fclose(lex[best]);
 	lex[best] = 0;
-	if (wordbuf[0])
-	    rtn = strlen(wordbuf); /* rtn=length */
     }
-    else
-    {
-	++wordlines[best];
-        StrUpr(wordbuffers[best]);
-	rtn = strlen(wordbuf); /* rtn=length */
-	if (skip) ; 
-	else if (rtn > maxlength)
-	{
-	    fprintf(stderr, "Word %s (file %s line %d) is too long (>%d); skipping!\n",
-			wordbuf, filename[best], wordlines[best], maxlength);
-	    skip = 1;
-	}
-	else if (rtn < 0 || rtn<minlength || isspace(wordbuf[0]))
-	{
-	    if (rtn) fprintf(stderr,"Word %s (file %s line %d ) is too short (<%d); skipping\n",
-			wordbuf, filename[best], wordlines[best], minlength);
-	    skip = 1;
-	}
-    }
-    if (skip) goto retry;
-    return rtn;
+    else StrUpr(wordbuffers[best]);
+    if (dup || strlen(wordbuf)>MAXLEN) goto retry;
+    return 0;
 }
 
 void CheckSort(const char *fname)
@@ -970,7 +769,7 @@ void CheckSort(const char *fname)
 	{
 	    if (fgets(buff, sizeof(buff), fp) == 0) break;
 	    ++lnum;
-	    StrUpr(buff);
+	    strupr(buff);
 	    buff[strlen(buff)-1] = 0;
 	    if (buff[0] && strcmp(buff, last)<0)
 	        printf("Line %ld %s\n", lnum, buff);
@@ -978,101 +777,6 @@ void CheckSort(const char *fname)
 	}
         fclose(fp);
     }
-}
-
-inline void swap(char **tbl, unsigned long i, unsigned long j)
-{
-    char *tmp = tbl[i];
-    tbl[i] = tbl[j];
-    tbl[j] = tmp;
-}
-
-void quicksort(char **tbl, unsigned long l, unsigned long r)
-{
-    unsigned long i, j;
-    if (r > l)
-    {
-        char *tmp = tbl[r], *tmp2; i = l-1; j = r;
-	for (;;)
-	{
-	    while (strcmp(tbl[++i], tmp) < 0);
-	    while (strcmp(tbl[--j], tmp) > 0);
-	    if (i >= j) break;
-	    swap(tbl, i, j);
-	}
-	swap(tbl, i, r);
-	quicksort(tbl, l, i-1);
-	quicksort(tbl, i+1, r);
-    }
-}
-
-int SetProgID(FILE *fp, int progID)
-{
-    if (fseek(fp, 76, SEEK_SET) == 0)
-    {
-        unsigned char v[4];
-        if (fread(v, 2, 1, fp)>0)
-	{
-	    if (fseek(fp, 78 + 8 * ((v[0]<<8)|v[1]), SEEK_SET)==0)
-	    {
-	        if (fread(v, 4, 1, fp)>0)
-		{
-		    v[1] = progID;
-		    if (fseek(fp, -4l, SEEK_CUR) == 0)
-		        if (fwrite(v, 4, 1, fp) > 0)
-			    return 0;
-		}
-	    }
-	}
-    }
-    return -1;
-}
-
-int SetProgID(const char *fname, int progID)
-{
-    FILE *fp = fopen(fname, "r+b");
-    if (fp)
-    {
-        int rtn = SetProgID(fp, progID);
-        fclose(fp);
-	return rtn;
-    }
-    return -1;
-}
-
-int ShowProgID(FILE *fp)
-{
-    if (fseek(fp, 76, SEEK_SET) == 0)
-    {
-        unsigned char v[4];
-        if (fread(v, 2, 1, fp)>0)
-	{
-	    unsigned long off = 78 + 8 * ((v[0]<<8)|v[1]);
-	    if (fseek(fp, off, SEEK_SET)==0)
-	    {
-	        if (fread(v, 4, 1, fp)>0)
-		{
-		    printf("Offset %lu Nodesize %d\n", off, (int)v[0]);
-		    printf("Offset %lu ID %d\n", off+1, (int)v[1]);
-		    printf("Old n3size %d\n", (int)v[2]);
-		    printf("Old n4size %d\n", (int)v[3]);
-		}
-	    }
-	}
-    }
-    return -1;
-}
-
-int ShowProgID(const char *fname)
-{
-    FILE *fp = fopen(fname, "rb");
-    if (fp)
-    {
-        int rtn = ShowProgID(fp);
-        fclose(fp);
-	return rtn;
-    }
-    return -1;
 }
 
 int main(int argc, char **argv)
@@ -1083,13 +787,13 @@ int main(int argc, char **argv)
 
     unsigned short l;
     int pos, n;
-    char word[80], lastword[80], *dname = 0, *pattern = 0, *regexp = 0;
-    int doraw = 0, dump = 0, progid = 0, type=USEALL;
-    int minlength = 1, maxlength = 32, mincnt = 0, maxcnt = 0, multi = 0;
-    time_t start_time = time(0);
+    char word[80], lastword[80], *dname = 0;
+    int restore = 0;
+    int doraw = 0, dump = 0, checksort = 0;
+    int minlength = 1, maxlength = 32;
 
-    fprintf(stderr, "Welcome to DictMgr for PalmWordPro!\n");
-    fprintf(stderr, "\nUse \"dictmgr -h\" for usage instructions\n\n");
+    fprintf(stderr, "Welcome to DictMgr for PalmWord++ Pro!\n");
+    fprintf(stderr, "\nUse \"dictmgr -?\" for usage instructions\n\n");
 
     for (int i=1; i<argc; i++)
     {
@@ -1111,75 +815,31 @@ int main(int argc, char **argv)
 		    if (i>=argc) useage();
 		    break;
 		case '?':
-		    pattern = argv[++i];
-		    if (i>=argc) useage();
-		    break;
-		case 'R':
-		    regexp = argv[++i];
-		    if (i >= argc) useage();
-		    break;
-		case 'h':
-		case 'H':
 		    useage();
 		    break;
-		case 'd':
+		case 'l':
 		    ++dump;
 		    break;
-		case 'l':
+		case 'm':
 		    minlength = atoi(argv[++i]);
 		    if (i>=argc) useage();
 		    break;
-		case 'L':
+		case 'M':
 		    maxlength = atoi(argv[++i]);
 		    if (i>=argc) useage();
-		    break;
-		case 'M':
-		    multi = 1;
 		    break;
 		case 'r':
 		    if (dname == 0) dname = "pw.dic";
 		    doraw = 1;
 		    break;
+		case 'R':
+		    restore = 1;
+		    break;
 		case 'D':
 		    ++debug;
 		    break;
-		case 'F':
-		    progid = atoi(argv[++i]);
-		    if (i>=argc) useage();
-		    break;
 		case 'S': 
-		    load_from_disk = 1;
-		    break;
-		case 'P': 
-		    progid = atoi(argv[++i]);
-		    if (i>=argc) useage();
-		    dname = argv[++i];
-		    if (i>=argc) useage();
-		    SetProgID(dname, progid);
-		    exit(0);
-		case 'I': 
-		    dname = argv[++i];
-		    if (i>=argc) useage();
-		    ShowProgID(dname);
-		    exit(0);
-		case 'w':
-		    mincnt = atoi(argv[++i]);
-		    if (i>=argc) useage();
-		    break;
-		case 'W':
-		    maxcnt = atoi(argv[++i]);
-		    if (i>=argc) useage();
-		    break;
-		case 't':
-		    if (++i>=argc) useage();
-		    if (argv[i][0]=='p' || argv[i][0]=='P')
-		        type = PREFIX;
-		    else if (argv[i][0]=='s' || argv[i][0]=='S')
-		        type = SUFFIX;
-		    else if (argv[i][0]=='m' || argv[i][0]=='M')
-		        type = MULTI;
-		    else if (argv[i][0]=='a' || argv[i][0]=='A')
-		        type = USEALL;
+		    checksort = 1;
 		    break;
 		default:
 		    useage();
@@ -1188,11 +848,8 @@ int main(int argc, char **argv)
 	default:
 	    if (dump)
 	        Dump(dump, dname, argv[i]);
-	    else if (pattern)
-		Consult(pattern, type, multi, minlength, maxlength,
-				mincnt, maxcnt, dname, argv[i]);
-	    else if (regexp)
-		REConsult(regexp, dname, argv[i]);
+	    else if (checksort)
+	        CheckSort(argv[i]);
 	    else for (int x = 0; x < 16; x++)
 	    {
  		if (lex[x] == 0)
@@ -1210,11 +867,7 @@ int main(int argc, char **argv)
 	    break;
 	}
     }
-    if (dump || pattern || regexp)
-    {
-        fprintf(stderr, "Time: %d secs\n", time(0)-start_time);
-        exit(0);
-    }
+    if (dump || checksort) exit(0);
     if (lex[0] == 0) lex[0] = stdin;
     if (dname == 0) dname = "pw.pdb";
     FILE *dawg = fopen(dname,"wb");
@@ -1230,109 +883,61 @@ int main(int argc, char **argv)
 
     lastword[0] = word[0] = 0;
     //for (i=0;i<=NodePool::MAXLEN;i++) nodeStk[i]=0;
-    
+
+    /* add words */
+
+    if (restore && lex[1]==0)
+    {
+	int wcnt = p->RestoreState(word, lastword);
+	/* Now skip forward in lex file to next word */
+	for (int i = wcnt; i--; )
+	    //fgets(word, NodePool::MAXLEN, lex);
+	    fgets(word, MAXLINELEN, lex[0]);
+	fprintf(stderr, "Resuming at %s\n", word);
+    }
     if (maxlength >= MAXLEN) maxlength = MAXLEN-1;
 
-    if (load_from_disk)
-    {
-        for (;;)
-        {
-            /*int l = */GetLine(word, lex, filename, categories, minlength, maxlength);
-	    if (word[0] == 0) break;
-
-	    /* Find the point of departure from last word */
-
-	    pos = cmpstr(word,lastword);
-	    strcpy(lastword,word);
-
-	    /* `bottom-out' of tree to point of departure, merging
-			any completed subtrees */
-
-	    p->Merge(pos);
-	    p->AddWord(word, pos);
-#ifdef DEBUG
-	    if (debug>2) p->DumpGraph(stdout);
+    (void)signal(SIGINT, (handler)HandleSignal);
+#ifdef UNIX
+    (void)signal(SIGQUIT, (handler)HandleSignal);
 #endif
-	}
-    }
-    else
+
+    while (!must_abort)
     {
-        /* count the number of words */
+        if (GetLine(word, lex, filename, categories) < 0)
+	    break;
+	int l = strlen(word)-1;	/* l now indexes the last letter */
 
-        long wcnt = 0;
-        for (;;)
-        {
-            int l = GetLine(word, lex, filename, categories, minlength, maxlength);
-	    if (l <= 0) break;
-	    ++wcnt;
-        }
-        printf("Found %ld words\n", wcnt);
-
-        /* allocate space */
-
-        char **words = new char*[wcnt];
-        if (words == 0)
-        {
-            fprintf(stderr, "Allocation failure\n");
-	    exit(1);
-        }
-
-        /* load the words */
-
-        ResetFiles(filename, lex);
-        word[0] = 0;
-        long wrd;
-        for (wrd = 0; wrd<wcnt;wrd++)
-        {
-            int l = GetLine(word, lex, filename, categories, minlength, maxlength);
-	    if (l <= 0) break;
-	    words[wrd] = new char[l+1];
-	    if (words[wrd]==0)
-	    {
-                fprintf(stderr, "Allocation failure\n");
-	        exit(1);
-	    }
-	    strncpy(words[wrd], word, l);
-	    words[wrd][l]=0;
-        }
-        printf("Loaded %ld words\n", wcnt = wrd);
-
-	if (must_sort)
+	if (l >= maxlength)
 	{
-            printf("Sorting...", wcnt = wrd);
-            fflush(stdout);
-	    quicksort(words, 0, wcnt-1);
-            printf("Done\n");
+	    fprintf(stderr, "Word %s is too long; skipping!\n", word);
+	    continue;
 	}
-	else printf("Input already sorted; excellent!\n");
+	else if (l<(minlength-1))
+	{
+	    if (l) fprintf(stderr,"Word %s is too short; skipping\n",word);
+	    continue;
+	}
 
-        /* add words */
+	/* Find the point of departure from last word */
 
-        for (wrd = 0; wrd < wcnt; wrd++)
-        {
-            if (wrd && strcmp(words[wrd], words[wrd-1]) == 0)
-	    {
-	        continue; // dup
-	    }
+	pos = cmpstr(word,lastword);
+	strcpy(lastword,word);
 
-            strcpy(word, words[wrd]);
-	    delete [] words[wrd];
-
-	    /* Find the point of departure from last word */
-
-	    pos = cmpstr(word,lastword);
-	    strcpy(lastword,word);
-
-	    /* `bottom-out' of tree to point of departure, merging
+	/* `bottom-out' of tree to point of departure, merging
 			any completed subtrees */
 
-	    p->Merge(pos);
-	    p->AddWord(word, pos);
+	p->Merge(pos);
+	p->AddWord(word, pos);
 #ifdef DEBUG
-	    if (debug>2) p->DumpGraph(stdout);
+	if (debug>2) p->DumpGraph(stdout);
 #endif
-        }
-        delete [] words;
+    }
+    if (must_abort)
+    {
+	p->SaveState(word, lastword);
+	delete p;
+	exit(0);
     }
     for (int x = 0; x < 16; x++)
     {
@@ -1342,24 +947,29 @@ int main(int argc, char **argv)
     }
 
     p->Merge(); /* Make sure we've bottomed out... */
-//p->PrintGraph(stdout);
     //p->MarkGraph();
 #ifdef DEBUG
     if (debug>1) p->DumpGraph(stdout);
 #endif
-    if (debug) p->CheckOptimality();
     /* We now have to convert the DAWG into an array of edges
     // in a file.  */
     unsigned long nn = p->IndexNodes();
     if (doraw) p->WriteDawg(dawg);
-    else p->WritePalmDB(dawg, nn, name, filename[0], progid); //((filename[1]==0)?filename[0]:0));
+    else p->WritePalmDB(dawg, nn, name, filename[0]); //((filename[1]==0)?filename[0]:0));
     fclose(dawg);
 #ifdef DEBUG
     if (debug) p->DumpGraph(stdout);
 #endif
     p->ShowStats();
-    fprintf(stderr, "Time: %d secs\n", time(0)-start_time);
     delete p;
     return 0;
 }
 
+static void HandleSignal(int signo)
+{
+    (void)signo;
+    if (++must_abort>3) signal(SIGINT, SIG_DFL);
+    fprintf(stderr, "Interrupted!\n");
+}
+
+

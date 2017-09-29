@@ -1,6 +1,10 @@
-#ifndef PILOT_H
+#ifndef MYPILOT_H
 
-#  define PILOT_H
+#  define MYPILOT_H
+
+// PalmWordPro extras
+
+#define HAS_DBASE_LISTS
 
 #  if !defined(UNIX) && !defined(TEST) && !defined(DUMP)
 #    define IS_FOR_PALM
@@ -24,21 +28,22 @@
 #    define ltoa(x)	itoa(x)
 #  endif
 
-// App specific
+// App-specific
 
-#define WORDFINDPP
-#define MY_CREATOR_ID		'xWrd'
+#  define VARVECT
+#  define WORDFINDPRO
+#  define USE_REGEXP
+#  define MY_CREATOR_ID		'xWrd'
 
-#define USE_DATABASES
-#define USE_LISTS
-#define USE_DATABASE_LIST_SOURCES
-#define USE_FIELDS
-#define USE_DIALOGS
+#  define USE_DATABASES
+#  define USE_LISTS
+#  define USE_DATABASE_LIST_SOURCES
+#  define USE_FIELDS
+#  define USE_DIALOGS
 
-// res file
+// resource header file
 
-#include "ptrsc.h"
+#  include "ptrsc.h"
 
 #endif
 
-

@@ -1,39 +1,38 @@
 #ifndef HISTORY_H
 #define HISTORY_H
 
-#define MAX_PAT_LEN		(64)
-#define NumHistoryItems		(10)
+// XXX Make MAX_PAT_LEN a variable passed in through the constructor
+
+#define NumHistoryItems		(10u)
 
 class History
 {
   protected:
-    VoidHand history[NumHistoryItems];
-    UInt pos;
-    char rtn[MAX_PAT_LEN];
+    UInt16 len;
+    MemHandle history[NumHistoryItems];
+    UInt16 pos;
+    char *rtn;
   public:
-    History();
-    void Init();
-    void Set(UInt pos, const char *pat, UInt maxlen);
+    History(UInt16 len_in);
+    void Set(UInt16 pos, const char *pat, UInt16 maxlen);
     void Add(const char *pat);
-    int NumItems() const
+    UInt16 MaxItems() const
     {
         return NumHistoryItems;
     }
-    char *Get(UInt idx)
+    char *Get(UInt16 idx);
+    char *GetItem(Int16 idx)
     {
-	HMemCopy(rtn, history[idx], MAX_PAT_LEN);
-	return rtn;
+        if (idx>=0 && idx<(Int16)NumHistoryItems)
+        {
+            UInt16 p = ((NumHistoryItems-1) + pos-idx)%NumHistoryItems;
+	    return Get(p);
+	}
+	return 0;
     }
-    char *GetItem(UInt idx)
-    {
-        UInt p = ((NumHistoryItems-1) + pos-idx)%NumHistoryItems;
-	return Get(p);
-    }
-    unsigned char *Save(unsigned char *ptr) const;
+    unsigned char *Save(unsigned char *ptr);
     unsigned char *Restore(unsigned char *ptr);
     ~History();
 };
 
 #endif
-
-

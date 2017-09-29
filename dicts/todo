@@ -1,0 +1,4 @@
+test that all dump okay.
+
+benchmark with 4 bits for depth compared of 3 (steal one from the child mask). These are 
+the same amount of work so which ever is fastest should be used.

@@ -1,10 +1,16 @@
 #include "mypilot.h"
 
-#define VARVECT
-
 #ifdef IS_FOR_PALM
+#ifdef WORDFINDPRO
 #include "ptrsc.h"
+#endif
+#ifdef WORDFINDPP
+#include "ptrsc.h"
+#endif
 #include "fw.h"
+#else // !IS_FOR_PALM
+#define USE_REGEXP
+#include "regex.h"
 #endif // IS_FOR_PALM
 
 #include "dict.h"
@@ -15,6 +21,8 @@ int debug = 0;
 #endif // DUMP
 
 extern int debug;
+
+#ifdef VARVECT
 
 void VariableSet::ComputeConstraints()
 {
@@ -57,37 +65,30 @@ void VariableSet::Show() const
     }
 #endif // IS_FOR_PALM
 }
-
-const char *ltoa(unsigned long l)
-{
-    if (l == 0)
-    	return "0";
-    else
-    {
-        static char x[10];
-    	int p = 9;
-	x[9]=0;
-    	while (l)
-    	{
-            x[--p] = (char)((l%10)+'0');
-            l = l / 10;
-    	}
-    	return x+p;
-    }
-}
+#endif
 
 #ifdef IS_FOR_PALM
-void DictionaryDatabase::Init()
+DictionaryDatabase::DictionaryDatabase()
+    : Database()
 #else
-void DictionaryDatabase::Init(const char *fname)
+DictionaryDatabase::DictionaryDatabase(const char *fname)
 #endif // IS_FOR_PALM
 {
+#ifdef IS_FOR_PALM
+    current_record = 0;
+#else
+    strncpy(dbname, fname, 31);
+    dbname[31]=0;
+    current_record = new unsigned char[NodesPerRecord*4];
+    fp = 0;
+#endif
+#ifdef VARVECT
     vars = 0;
-#ifndef OLD_GETNODE
+#endif
+#ifdef IS_FOR_PALM
     handles = 0;
     records = 0;
 #endif
-    current_record = 0;
     current_recnum = -1;
     matchtype = 0;
     mincnt = 0;
@@ -95,47 +96,43 @@ void DictionaryDatabase::Init(const char *fname)
     minlen = 0;
     maxlen = 0;
     numlens = 0;
-#ifdef IS_FOR_PALM
-    db = 0;
-    owner = 0;
-#else
-    strncpy(dbname, fname, 31);
-    dbname[31]=0;
-    if (current_record==0)
-        current_record = new unsigned char[NodesPerRecord*4];
-    fp = 0;
+#ifdef USE_REGEXP
+    re = 0;
 #endif
-
 }
 
+#if 0
 Boolean DictionaryDatabase::OnOpen()
 {
 #ifdef IS_FOR_PALM
-#ifndef OLD_GETNODE
-    FreeRecords();
     InitRecords();
-#endif
     return Database::OnOpen();
 #else
     return true;
 #endif
 }
 
+void DictionaryDatabase::OnClose()
+{
+#ifdef IS_FOR_PALM
+    FreeRecords();
+#endif
+}
+#endif
+
 DictionaryDatabase::~DictionaryDatabase()
 {
-#ifdef OLD_GETNODE
-    if (current_record) 
 #ifdef IS_FOR_PALM
-        MemHandleUnlock(current_handle);
+    FreeRecords();
 #else
-        delete [] current_record;
-#endif // IS_FOR_PALM
-#else
-        FreeRecords();
+    delete [] current_record;
+#endif
+#ifdef USE_REGEXP
+    delete re;
 #endif
 }
 
-const char *DictionaryDatabase::MatchTypeName(UInt t)
+const char *DictionaryDatabase::MatchTypeName(UInt16 t)
 {
     switch(t)
     {
@@ -145,7 +142,7 @@ const char *DictionaryDatabase::MatchTypeName(UInt t)
     }
 }
 
-const char *DictionaryDatabase::LimitName(UInt n)
+const char *DictionaryDatabase::LimitName(UInt16 n)
 {
     // these get used for labels and must be static for PalmOS
     switch(n)
@@ -174,6 +171,9 @@ const char *DictionaryDatabase::LimitName(UInt n)
     return "";
 }
 
+//----------------------------------------------------------------------------------
+// Get a node from the dictionary database
+
 DictionaryDatabase::DictionaryNode
     DictionaryDatabase::GetNode(unsigned long n)
 {
@@ -183,50 +183,20 @@ DictionaryDatabase::DictionaryNode
 #ifdef RAW_DAWG // nodes begin at 0 in dawgs but at 1 in .pdb files
     --n;
 #endif // RAW_DAWG
-#ifdef OLD_GETNODE
-    int rn = Node2Record(n);
-    if (current_recnum != rn)
-    {
-#ifdef DUMP
-        dbcnt++;
-#endif
+
 #ifdef IS_FOR_PALM
-        // unlock the current record
-            
-        if (current_record)
-            MemHandleUnlock(current_handle);
-                
-        // Fetch and lock the `rn'th record
-            
-        current_handle = db ? QueryRecord((UInt)rn) : 0;
-        if (current_handle)
-        {
-	    current_record = 
-            	(unsigned char*)MemHandleLock(current_handle);
-            current_recnum = rn;
-        }
-#else
-        // !! must make nodeStart the offset in the pdb of the nodes,
-	// !! and nodesize set to 3 or 4 as determined from pdb
-	// nodeStart = 78 + 8 * nrecs
-	// nrecs is stored as a short at offset 76
-	// 
-	fseek(fp, nodeStart + rn*NodesPerRecord*nodesize, SEEK_SET);
-	if (fread(current_record, nodesize, NodesPerRecord, fp)>0)
-	{
-            current_recnum = rn;
-	}
-#endif // IS_FOR_PALM
-        else
-        {
-            current_record = 0;
-            current_recnum = -1;
-        }
-    }
-#else // NEW GETNODE CODE
     current_recnum = Node2Record(n);
     current_record = records[current_recnum];
+#else
+    int r = Node2Record(n);
+    if (r != current_recnum)
+    {
+        current_recnum = r;
+        fseek(fp, nodeStart+r*NodesPerRecord*nodesize, SEEK_SET);
+        fread(current_record, nodesize, NodesPerRecord, fp);
+    }
 #endif
+    
     unsigned long v;
     if (current_record == 0)
         v = 0;
@@ -234,6 +204,7 @@ DictionaryDatabase::DictionaryNode
     {
         if (nodesize == 3)
 	{
+	    // this should perhaps be written in assembly?
 	    unsigned char *dp = current_record+(n%NodesPerRecord)*3;
             v = (dp[0]&0xFE);
             v = (v<<8) | (dp[0]&0x1);
@@ -243,11 +214,18 @@ DictionaryDatabase::DictionaryNode
 	else
 	{
 	    unsigned char *dp = current_record+(n%NodesPerRecord)*4;
+#ifdef IS_FOR_PALM
             v = *((unsigned long*)(dp));
+#else
+            v = (dp[0]<<24) | (dp[1]<<16) | (dp[2]<<8) | dp[3];
+#endif
 	}
     }
     return DictionaryNode(v);
 }
+
+//------------------------------------------------------------------------------
+// Compile a consultation template pattern
 
 unsigned long DictionaryDatabase::NextPatternElt(char *&pat,
 					int &is_float, int &is_single)
@@ -259,14 +237,14 @@ unsigned long DictionaryDatabase::NextPatternElt(char *&pat,
 	is_float = 0;
 	rtn = LetterMask(*pat);
     }
-    else if (*pat==':' || *pat == '*' || *pat == '=')
+    else if (*pat==FIX_ANY || *pat == FIX_VOWEL || *pat == FIX_CONSONANT)
     {
-	is_single = 1;
+	is_single = 0;
 	is_float = 0;
 	// fixed
-	if (*pat==':') rtn = ALL;
-	else if (*pat=='*') rtn = VOWELS; 
-	else if (*pat=='=') rtn = CONSONANTS;
+	if (*pat==FIX_ANY) rtn = ALL;
+	else if (*pat==FIX_VOWEL) rtn = VOWELS; 
+	else if (*pat==FIX_CONSONANT) rtn = CONSONANTS;
     }
     else if (islower(*pat))
     {
@@ -274,13 +252,13 @@ unsigned long DictionaryDatabase::NextPatternElt(char *&pat,
 	is_float = 1;
 	rtn = LetterMask((char)(*pat-('a'-'A')));
     }
-    else if (*pat=='.' || *pat == '+' || *pat == '-')
+    else if (*pat==FLT_ANY || *pat == FLT_VOWEL || *pat == FLT_CONSONANT)
     {
 	is_single = 0;
 	is_float = 1;
-	if (*pat=='.') rtn = ALL;
-	else if (*pat=='+') rtn = VOWELS; 
-	else if (*pat=='-') rtn = CONSONANTS;
+	if (*pat==FLT_ANY) rtn = ALL;
+	else if (*pat==FLT_VOWEL) rtn = VOWELS; 
+	else if (*pat==FLT_CONSONANT) rtn = CONSONANTS;
     }
     else if (*pat == '[' || *pat == '{' || *pat == '(' || *pat == '>')
     {
@@ -348,6 +326,9 @@ char *DictionaryDatabase::NextPat(char *pat, int pos)
 #endif // WORDEND
 	if (isdigit(*pat)) // variable placeholder
 	{
+#if defined(WORDFINDPP) || defined(WORDFINDLITE)
+	    return 0;
+#else
 	    int var = (*pat)-'0';
 	    if (isdigit(pat[1]))
 	    {
@@ -358,20 +339,21 @@ char *DictionaryDatabase::NextPat(char *pat, int pos)
 	    --var;
 	    anchormasks[vlen++] = VARNUM | var;
 	    simple_search = 0;
+#ifdef VARVECT
 	    if (pat[1]=='/') // associated letter is explicitly given
 	    {
 	        pat += 2;
-#ifdef VARVECT
 	        int is_float, is_single;
 		if (vars)
 		    if ((v = NextPatternElt(pat, is_float, is_single)) == 0)
 		        return 0; // syntax error
 		    else
 		        vars->SetConstraint(var, v);
-#endif // VARVECT
 	    }
+#endif VARVECT
+#endif
 	}
-        else
+        else // letter or letter range
 	{
 	    int is_float, is_single;
 	    v = NextPatternElt(pat, is_float, is_single);
@@ -397,7 +379,7 @@ char *DictionaryDatabase::NextPat(char *pat, int pos)
 		    if ((v & (1ul<<i)) != 0)
 		    	++maxpool[i];
 	    }
-	    else
+	    else // anchored letter or letter range
 	    {
 		anchormasks[vlen++] = v;
 		if (is_single && pos==progpoint) ++progpoint;
@@ -408,6 +390,9 @@ char *DictionaryDatabase::NextPat(char *pat, int pos)
     return (plen>32) ? 0 : pat; // only allow 32 floating ranges
     				// (i.e. unsigned long bitmask).
 }
+
+//--------------------------------------------------------------------
+// Find an allocation of letters from the pool that matches our needs
 
 int DictionaryDatabase::FindPoolAllocation(unsigned pos, int tot, int wilds,
 						unsigned long pmask)
@@ -442,6 +427,9 @@ int DictionaryDatabase::FindPoolAllocation(unsigned pos, int tot, int wilds,
     return -1;
 }
 
+//------------------------------------------------------------------------
+// Remove a letter from the tile pool
+
 int DictionaryDatabase::RemoveFromPool(int c)
 {
     if (allocpool[c] == maxpool[c]) // no can do...
@@ -469,6 +457,9 @@ int DictionaryDatabase::RemoveFromPool(int c)
     return 0;
 }
 
+//--------------------------------------------------------------------
+// Replace a letter in the tile pool
+
 void DictionaryDatabase::ReplaceInPool(int c)
 {
     if (--allocpool[c] >= fixedpool[c]) // return to float?
@@ -478,14 +469,16 @@ void DictionaryDatabase::ReplaceInPool(int c)
     }
 }
 
+//--------------------------------------------------------------------
+
 int DictionaryDatabase::GrabLetter(DictionaryNode &n)
 {
     unsigned long vmask = anchormasks[sp+vecoff];
-    int idx = n.Index();
+    int idx = n.Index(); // get the letter index 0..25
     if (vmask & VARNUM) // variable
     {
-	int vnum = (int)(vmask & 0xff); // var #
-	if (vnum < 0 || vnum > 26) return -1;
+	int vnum = (int)(vmask & 0xff); // Get the var # for this position
+	if (vnum < 0 || vnum >= 26) return -1;
 	if (refcount[vnum]==0) // first use of this var
 	{
 	    if (varset[idx]==0)	// letter mustn't be in use by a different var
@@ -535,9 +528,13 @@ void DictionaryDatabase::ReplaceLetter(DictionaryNode &n)
 	 ReplaceInPool(n.Index());
 }
 
+//---------------------------------------------------------------------
+// Prepare for a new search of a specific length
+
 void DictionaryDatabase::InitStack(int l, int first_vec)
 {
     stop = l-1;
+    if (stop>=totlen) stop=totlen-1;
     Nstk[0] = GetNode(nstk[sp = start = 0] = FIRSTNODE);
     vecoff = first_vec;
     swcnt = 1;
@@ -547,6 +544,9 @@ void DictionaryDatabase::InitStack(int l, int first_vec)
     memset((char*)refcount, 0, sizeof(refcount[0])*27);
     memset((char*)varset, 0, sizeof(varset[0])*26);
 }
+
+//---------------------------------------------------------------------
+// Clear everything ready for a new search
 
 void DictionaryDatabase::Reinitialise()
 {
@@ -563,8 +563,8 @@ void DictionaryDatabase::Reinitialise()
     memset((char*)nstk, 0, sizeof(nstk[0])*30);
     memset((char*)anchormasks, 0, sizeof(anchormasks[0])*MAXPATLEN);
     memset((char*)varpool, 0, sizeof(varpool[0])*MAXPATLEN);
-    memset((char*)wlen, 0, sizeof(wlen[0])*32);
-    memset((char*)vpos, 0, sizeof(vpos[0])*32);
+    memset((char*)word_lengths, 0, sizeof(word_lengths[0])*32);
+    memset((char*)start_offset_in_pat, 0, sizeof(start_offset_in_pat[0])*32);
     memset((char*)lastmulti, 0, sizeof(lastmulti[0])*80);
     sp = 0;
     start = 0;
@@ -583,49 +583,66 @@ void DictionaryDatabase::Reinitialise()
 #endif // IS_FOR_PALM
     {
 #ifdef RAW_DAWG
-	nodesize = 4;
+	    nodesize = 4;
 #else
 #ifdef IS_FOR_PALM
-        VoidHand h = QueryRecord(0);
-        if (h)
+        unsigned char *v = records[0];
         {
-	    unsigned char *lp = (unsigned char*)MemHandleLock(h);
-	    if (lp)
-	    {
-	        if (lp[2]==3)
-	            nodesize = 3;
-	        else
-	            nodesize = 4;
-	    }
-            MemHandleUnlock(h);
-        }
 #else
 	// find the nodesize in the .pdb file
 	unsigned char v[4];
 	fseek(fp, 76, SEEK_SET);
 	if (fread(v, 2, 1, fp)>0)
-	    numrecords = (v[0]<<8) | v[1];
+	        numrecords = (v[0]<<8) | v[1];
 	nodeStart = 78 + 8 * numrecords;
 	fseek(fp, nodeStart, SEEK_SET);
 	if (fread(v, 4, 1, fp)>0)
-	    if (v[2]==3)
-	        nodesize = 3;
-	    else
-	        nodesize = 4;
+	{
 #endif // IS_FOR_PALM
+#ifdef DICTMGR
+        if (v[1] < 4)
+#endif
+#ifdef WORDFINDLITE
+        if (v[1] < 2)
+#endif
+#ifdef WORDFINDPP
+        if (v[1] < 3)
+#endif
+#ifdef WORDFINDPRO
+        if (v[1] < 4)
+#endif
+	        {
+	            nodesize = v[0];
+#if 0 // backward compat with pre-Lite dicts; deprecated
+		        if (nodesize==0)
+		        {
+		            // backward compatability with pre-Lite dicts
+		            if (v[2]==3)
+		               nodesize = 3;
+		            else if (v[3]==4)
+		                nodesize = 4;
+		        }
+#endif
+	        }
+	        else 
+	            nodesize = 0;
+        }
 #endif // RAW_DAWG
     }
 }
 
-#ifndef OLD_GETNODE
+//---------------------------------------------------------------------------
+// Set up the records pointers to the database
+
+#ifdef IS_FOR_PALM
 
 void DictionaryDatabase::InitRecords()
 {
-    handles = new VoidHand[numrecords];
+    handles = new MemHandle[numrecords];
     records = new unsigned char*[numrecords];
     for (int i = 0; i < numrecords; i++)
     {
-        handles[i] = db ? QueryRecord((UInt)i) : 0;
+        handles[i] = db ? QueryRecord((UInt16)i) : 0;
 	if (handles[i])
 	    records[i] = (unsigned char*)MemHandleLock(handles[i]);
 	else
@@ -633,55 +650,97 @@ void DictionaryDatabase::InitRecords()
     }
 }
 
+// and release them...
+
 void DictionaryDatabase::FreeRecords()
 {
     if (handles)
         for (int i = 0; i < numrecords; i++)
             MemHandleUnlock(handles[i]);
     delete [] handles;
-    delete [] records;
     handles = 0;
+    delete [] records;
     records = 0;
 }
 
-#endif
+#endif IS_FOR_PALM
 
-void DictionaryDatabase::InitDB()
+//-----------------------------------------------------------------------------
+// Initialise the dictionary database
+
+int DictionaryDatabase::InitDB()
 {
 #ifdef IS_FOR_PALM
     if (db == 0)
     {
-        if (id) Database::Open(card, (LocalID)id, dmModeReadOnly);
-        else Database::Open(DictDBType, dmModeReadOnly);
-//	if (db == 0) return -1;
+        if (id) Database::OpenByID((LocalID)id, card, dmModeReadOnly);
+        else Database::OpenByType(DictDBType, dmModeReadOnly);
+	if (db == 0) return -1;
     }
+    if (records == 0)
+        InitRecords();
 #else
     if (fp == 0)
     {
         Open(dbname);
     }
 #endif // IS_FOR_PALM
-#ifndef OLD_GETNODE
-    if (records == 0)
-        InitRecords();
-#endif
     Reinitialise();
+    if (nodesize == 0)
+    {
+#ifdef IS_FOR_PALM
+        Close();
+        FreeRecords();
+	db = 0;
+#else
+	fclose(fp);
+	fp = 0;
+#endif
+	return -1;
+    }
+    return 0;
 }
+
+//---------------------------------------------------------------------------
+// Begin a template-based consultation
 
 int DictionaryDatabase::StartConsult(char *pat,
 				      int type_in,
 				      int multi_in,
 				      int minlen_in, int maxlen_in,
 				      int mincnt_in, int maxcnt_in,
+#ifdef VARVECT
 				      VariableSet *vars_in)
+#else
+				      void *vars_in)
+#endif
 {
-    InitDB();
+    if (InitDB() < 0) return -1;
+    if (type_in == MULTI)
+    {
+        type_in = USEALL;
+	multi_in = 1;
+    }
 #ifdef VARVECT
     vars = vars_in;
-    vars->ClearUsed();
+    if (vars) vars->ClearUsed();
+#else
+    (void)vars_in;
 #endif // VARVECT
     int px = 0;
-    while (pat && *pat) pat = NextPat(pat, px++);
+    totlen = -1;
+    
+    while (pat && *pat)
+    {
+	if (*pat =='$')
+	{
+	    totlen = px;
+	    ++pat;
+	}
+	else pat = NextPat(pat, px++);
+    }
+    if (pat == 0) return -2; // syntax error
+    if (totlen<0) totlen = px;
 #ifdef WORDEND 
     if (has_wordend_constraints)
     {
@@ -719,7 +778,9 @@ int DictionaryDatabase::StartConsult(char *pat,
     minlen = minlen_in; maxlen = maxlen_in;
     mincnt = mincnt_in;	maxcnt = maxcnt_in;
     if (minlen < 1) minlen = 1;
+    if (minlen > maxlen && maxlen>0) minlen = maxlen;
     if (maxlen < 1 || maxlen > vlen) maxlen = vlen;
+    if (minlen > vlen) minlen = vlen;
     matchtype = type_in;
     if (!multi_in)
     {
@@ -736,53 +797,152 @@ int DictionaryDatabase::StartConsult(char *pat,
         pmask |= (1ul << i);
     if (matchtype==USEALL)
     {
-	wlen[0] = vlen;
-	vpos[0] = 0;
+	word_lengths[0] = vlen;
+	start_offset_in_pat[0] = 0;
 	numlens = 1;
     }
-    else if (matchtype==PREFIX)
+    else
     {
-	for (int i = minlen; i<=maxlen; i++)
-	{
-	    wlen[i-minlen] = i;
-	    vpos[i-minlen] = 0;
-	}
-	numlens = maxlen-minlen+1;
+	int minmlen = mincnt*minlen;
+	int maxmlen = maxcnt*maxlen;
+	if (minmlen>vlen) minmlen = vlen;
+	if (maxmlen>vlen) maxmlen = vlen;
+	if (matchtype==PREFIX)
+    	{
+	    for (int i = minmlen; i<=maxmlen; i++)
+	    {
+	        word_lengths[i-minmlen] = i;
+	        start_offset_in_pat[i-minmlen] = 0;
+	    }
+        }
+        else if (matchtype==SUFFIX)
+        {
+	    for (int i = minmlen; i<=maxmlen; i++)
+	    {
+	        word_lengths[i-minmlen] = i;
+	        start_offset_in_pat[i-minmlen] = vlen-i;
+	    }
+        }
+	numlens = maxmlen-minmlen+1;
     }
-    else if (matchtype==SUFFIX)
-    {
-	for (int i = minlen; i<=maxlen; i++)
-	{
-	    wlen[i-minlen] = i;
-	    vpos[i-minlen] = vlen-i;
-	}
-	numlens = maxlen-minlen+1;
-    }
-    InitStack(wlen[0], vpos[0]);
+    InitStack(word_lengths[0], start_offset_in_pat[0]);
 #ifndef IS_FOR_PALM
-    printf("Mincnt %d Maxcnt %d\n", mincnt, maxcnt);
-    printf("Minlen %d Maxlen %d\n", minlen, maxlen);
-    printf("Wild Floats %d   Has Float Ranges %d\n", wildfloats, has_float_ranges);
-    for (int i = 0; i < 26; i++)
+    if (debug)
     {
-        printf("Letter %c  Avail in Floating Pool: Min %d  Max %d\n", i+'A',
+        printf("Mincnt %d Maxcnt %d\n", mincnt, maxcnt);
+        printf("Minlen %d Maxlen %d\n", minlen, maxlen);
+        printf("Wild Floats %d   Has Float Ranges %d\n", wildfloats, has_float_ranges);
+        for (int i = 0; i < 26; i++)
+        {
+            printf("Letter %c  Avail in Floating Pool: Min %d  Max %d\n", i+'A',
 			fixedpool[i], maxpool[i]);
-    }
-    for (int i = 0; i < vlen; i++)
-    {
-        printf("Anchormask %d: %08X\n", i,  anchormasks[i]);
-    }
-    for (int i = 0; i < plen; i++)
-    {
-        printf("Var Pool %d: %08X\n", i,  varpool[i]);
+        }
+        for (int i = 0; i < vlen; i++)
+        {
+            printf("Anchormask %d: %08X\n", i,  anchormasks[i]);
+        }
+        for (int i = 0; i < plen; i++)
+        {
+            printf("Var Pool %d: %08X\n", i,  varpool[i]);
+        }
     }
 #endif // IS_FOR_PALM
     return 0;
 }
 
-void DictionaryDatabase::GetWord(char *word, int stacklen)
+//---------------------------------------------------------------------------------
+// Begin a PalmUInt16Lite-style consulatation - basically convert to a PalmUInt16Pro
+// one and then call the StartConsult routine for PalmUInt16Pro.
+
+#ifdef WORDFINDLITE
+int DictionaryDatabase::StartConsult(const char *tmplate, const char *anagram)
+{
+    char pat[64];
+    unsigned long anag_used = 0l;
+    UInt16 l = (UInt16)strlen(tmplate), anag_l = 0, wcnt = 1;
+    if (l >= sizeof(pat)) return -1;
+    if (anagram)
+    {
+        anag_l = (UInt16)strlen(anagram);
+	if (anag_l > 32) return -1;
+    }
+    for (int i = 0; i < l; i++)
+    {
+	char tch = tmplate[i];
+	if (islower(tch)) tch = toupper(tch);
+	pat[i] = tch;
+	if (pat[i] == '|')
+	    wcnt++;
+        else if (anag_l && tmplate[i]!='?')
+	{
+	    // mark the template letter as used
+	    // if it occurs in the anagram
+	    for (int j = 0; j < anag_l; j++)
+	    {
+		char ach = anagram[j];
+		if (ach=='|' || ((1l<<j)&anag_used)!=0) continue;
+		if (islower(ach)) ach = toupper(ach);
+		if (ach == tch)
+		{
+		    anag_used |= 1ul << j;
+		    break;
+		}
+	    }
+	}
+    }
+    if (anag_l)
+    {
+        // if anagram was longer, append some '?' chars. This allows us
+        // to enter just an anagram 
+        if (l == 0) // use '|' if in anagram
+        {
+            for (int i = 0 ; i < anag_l; i++)
+	        if (anagram[i] == '|')
+                    pat[l++] = '|';
+	        else
+                    pat[l++] = '?';
+        }
+        else // non-empty template; ignore '|'s in anagram and extend pat
+        {
+            int xtra = (int)(anag_l - l + wcnt - 1);
+            for (int i = 0 ; i < anag_l; i++)
+	        if (anagram[i] == '|') --xtra;
+            while (xtra-->0)
+                pat[l++] = '?';
+	}
+    }
+    // convert '?' to ':' or a lower case unused letter from the anagram
+    for (int i = 0; i < l; i++)
+    {
+        if (pat[i]=='?')
+	{
+	    pat[i] = FIX_ANY;
+	    if (anag_l) // if any letters left in anag, use them
+	    {
+		for (int j = 0; j < anag_l; j++)
+		{
+		    char ach = anagram[j];
+		    if (ach == '|' || ((1l<<j)&anag_used)!=0) continue;
+		    if (isupper(ach)) ach = tolower(ach);
+		    pat[i] = ach;
+		    anag_used |= 1ul << j;
+		    break;
+		}
+	    }
+	}
+    }
+    pat[l] = 0;
+    return StartConsult(pat);
+}
+#endif
+
+//---------------------------------------------------------------------------
+// Use the stack to reconstruct the current match as a printable string
+
+unsigned long DictionaryDatabase::GetUInt16(char *word, int stacklen)
 {
     int j = 0;
+    unsigned long rtn = 0ul;
     for (int i = 0; i<=stacklen; i++)
     {
 	if (i && nstk[i] <= 26)
@@ -792,35 +952,45 @@ void DictionaryDatabase::GetWord(char *word, int stacklen)
 	}
         DictionaryNode n = Nstk[i];
 	word[j++] = n.Char();
+	rtn |= 1ul << n.Index();
     }
     word[j] = 0;
+    return rtn;
 }
 
+//----------------------------------------------------------------------------
+// Subclasses can override this to abort a search
 
 int DictionaryDatabase::MustStop()
 {
     return 0;
 }
 
-void DictionaryDatabase::ShowProgress(DictionaryNode &N)
+//----------------------------------------------------------------------------
+// Give an indication of the search progress percentage
+
+extern void ShowProgress(int p);
+
+void DictionaryDatabase::ShowProgress()
 {
 #ifdef IS_FOR_PALM
-    if (owner && sp == (progpoint+1))
+    if (sp >= (progpoint+1))
     {
-	DictionaryNode n = Nstk[progpoint];
+	DictionaryNode n1 = Nstk[progpoint];
+	DictionaryNode n2 = Nstk[progpoint+1];
         int p;
 	if (numlens == 1)
-	    p = ((n.Index()*26+N.Index()))/6;
+	    p = ((n1.Index()*26+n2.Index()))/6;
 	else
-	    p = ((lennow+1)*(n.Index()*26+N.Index()))/(6*numlens);
+	    p = ((lennow+1)*(n1.Index()*26+n2.Index()))/(6*numlens);
 	if (p != progress)
-            owner->ShowProgress(progress = p);
+	    ::ShowProgress(progress = p);
     }
-#else
-    (void)N;
 #endif // IS_FOR_PALM
 }
-// iTERATIVE IMPLEMENTATION OF RECURSIVE SEARCH
+
+//-----------------------------------------------------------------------------
+// Iterative implementation of a recursive template-based search
 
 int DictionaryDatabase::NextStep(char *line)
 {
@@ -828,15 +998,11 @@ int DictionaryDatabase::NextStep(char *line)
     DictionaryNode N = Nstk[sp];
 
 #ifdef IS_FOR_PALM
-    ShowProgress(N);
-    if ((++stepnum%100)==0 && MustStop())
-        return -2;
-#else
-    if (debug)
+    if ((++stepnum%100)==0)
     {
-        GetWord(line, stop);
-        printf("%d  sp %d  Node %d Line %s ", stepnum++, sp, nstk[sp], line);
-        N.Print();
+        ShowProgress();
+        if (MustStop())
+            return -2;
     }
 #endif // IS_FOR_PALM
 
@@ -853,17 +1019,16 @@ printf("sp %d vecoff %d anchormasks[sp+vecoff] %lX WORDEND %d is_term %d start %
         {
 	    if (N.IsTerminal() && wlen>=minlen && swcnt>=mincnt)
 	    {
-		GetWord(line, stop);
+		GetUInt16(line, stop);
 #ifdef VARVECT
 		// Update the set of possible variables
 		if (vars)
 		{
 		    for (int i = 0; i < 26; i++) // letters
 		    {
-		        int var = varset[i]; // get var# used by letter
-		        if (var<1 || var>26) continue;
-//		        if (refcount[var-1]>0) // should be true
-			   vars->UseIdx(var-1, i);
+		        int var = varset[i]-1; // get var# bound to letter i
+		        if (var<0 || var>25) continue;
+			vars->UseIdx(var, i);
 		    }
 		}
 #endif // VARVECT
@@ -933,13 +1098,7 @@ printf("sp %d vecoff %d anchormasks[sp+vecoff] %lX WORDEND %d is_term %d start %
 	    // so 
 	    start = laststart;
 	    --swcnt;
-#if 1
 	    laststart = starts[swcnt-1];
-#else
-
-	    while (laststart > 0 && nstk[--laststart] > 26)
-	        (void)0;
-#endif // 1
 	    --sp;
 	    N = Nstk[sp];
 	    if (N.FirstChild() && (sp-start+1)<maxlen
@@ -986,7 +1145,7 @@ int DictionaryDatabase::NextMatch(char *line, int len)
 #endif // VARVECT
 	        return -1;
 	    }
-	    InitStack(wlen[lennow], vpos[lennow]);
+	    InitStack(word_lengths[lennow], start_offset_in_pat[lennow]);
 	}
 	else if (x == 0) 
 	    return ++matches;
@@ -999,7 +1158,8 @@ int DictionaryDatabase::NextMatch(char *line, int len)
     line[2] = ' ';
     line[3] = N.Char();
     line[4] = ' ';
-    strcpy(line+5, ltoa(N.FirstChild()));
+    StrItoA(line+5, N.FirstChild());
+//    strcpy(line+5, ltoa(N.FirstChild()));
 #else
     sprintf(line, "%ld %c %c%c %ld", start, N.Char(),
 		(N.IsTerminal()?'T':' '),
@@ -1010,6 +1170,104 @@ int DictionaryDatabase::NextMatch(char *line, int len)
 #endif // 1
 }
 
+//--------------------------------------------------------------------------
+// Iterative implementation of a regular-expression based search
+
+#ifdef USE_REGEXP
+
+int DictionaryDatabase::StartREConsult(const char *regexp)
+{
+    if (InitDB() < 0) return -1;
+    if (regexp)
+    {
+        delete re;
+        int minl, maxl;
+        re = new WFRegExp();
+        if ((remask = re->Compile(regexp, minmask, minl, maxl)) == 0ul)
+        {
+            delete re;
+            re = 0;
+            return -2;
+        }
+        if (minlen < minl) minlen = minl;
+        if (maxlen==0 || maxlen > maxl) maxlen = maxl;
+    }
+    numlens = 1;
+    progpoint = 0;
+    matches = 0;
+    Nstk[0] = GetNode(nstk[sp = 0] = FIRSTNODE);
+    // for efficiency, we decrement minlen as sp starts from 0 but
+    // corresponds to lengths of 1 or more.
+    --minlen;
+    return 0;
+}
+
+int DictionaryDatabase::NextREStep(char *line)
+{
+    int rtn = 1;
+#ifdef IS_FOR_PALM
+    if ((++stepnum%100)==0)
+    {
+        ShowProgress();
+        if (MustStop())
+            return -2;
+    }
+#endif // IS_FOR_PALM
+    DictionaryNode N = Nstk[sp];
+    if (sp || (remask & (1ul << N.Index())) != 0)
+    {
+        if (N.IsTerminal() && sp>=minlen)
+        {
+            unsigned long m = GetUInt16(line, sp);
+            if ((m & minmask) == minmask && re->Match(line))
+                rtn = 0;
+        }
+        // move to next child, if there is one
+        if (N.FirstChild() && sp < maxlen)
+        {
+	    ++sp;
+	    Nstk[sp] = GetNode(nstk[sp] = N.FirstChild());
+	    return rtn;
+        }
+    }
+    for (;;)
+    {
+        if (!N.IsLastPeer())
+        {
+            Nstk[sp] = GetNode(++nstk[sp]);
+            break;
+        }
+        else if (sp == 0)
+        {
+            rtn = -1;
+            break;
+        }
+        else // pop stack
+        {
+	    --sp;
+	    N = Nstk[sp];
+        }
+    }
+    return rtn;
+}
+
+int DictionaryDatabase::NextREMatch(char *line, int len)
+{
+    maxlen = len-1; // avoid overruns
+    for (;;)
+    {
+    	int x = NextREStep(line);
+    	if (x < 0)
+    	    return x;
+	else if (x == 0) 
+	    return ++matches;
+    }
+}
+
+#endif
+
+//--------------------------------------------------------------------------
+    
 void DictionaryDatabase::Reset()
 {
     memset((char*)allocpool, 0, sizeof(allocpool[0])*26);
@@ -1018,13 +1276,15 @@ void DictionaryDatabase::Reset()
     for (int i = 0; i < plen; i++)
         pmask |= (1ul << i);
     lennow = stepnum = progress = matches = 0;
-    InitStack(wlen[lennow], vpos[lennow]);
+    InitStack(word_lengths[lennow], start_offset_in_pat[lennow]);
 }
 
+//--------------------------------------------------------------------------
+// Dump the database
 
 #ifdef DUMP
 
-char newWord[32];
+char newUInt16[32];
 
 void DictionaryDatabase::RecursiveDump(int pos, long n, FILE *ofp)
 {
@@ -1033,12 +1293,12 @@ void DictionaryDatabase::RecursiveDump(int pos, long n, FILE *ofp)
     for (;;)
     {
     	DictionaryNode N = GetNode(n);
-	newWord[pos] = N.Char();
+	newUInt16[pos] = N.Char()+'a'-'A';
 	/* If the node is terminal, we have a valid matched word. */
 	if (N.IsTerminal())
 	{
-	    newWord[pos+1]=0;
-	    fprintf(ofp, "%s\n", newWord);
+	    newUInt16[pos+1]=0;
+	    fprintf(ofp, "%s\n", newUInt16);
 	}
 	RecursiveDump(pos+1, N.FirstChild(), ofp);
 	/* Move to next edge */
@@ -1049,11 +1309,11 @@ void DictionaryDatabase::RecursiveDump(int pos, long n, FILE *ofp)
 
 void DictionaryDatabase::Dump(FILE *fp)
 {
-#ifndef OLD_GETNODE
+#ifdef IS_FOR_PALM
     InitRecords();
 #endif
     RecursiveDump(0, 1l, fp);
-#ifndef OLD_GETNODE
+#ifdef IS_FOR_PALM
     FreeRecords();
 #endif
 }
@@ -1062,22 +1322,22 @@ void DictionaryDatabase::RawDump(FILE *fp)
 {
     unsigned long i;
     long numnodes = numrecords * NodesPerRecord;
-#ifndef OLD_GETNODE
+#ifdef IS_FOR_PALM
     InitRecords();
 #endif
     fprintf(fp, "Nodes: %ld\n", numnodes);
     for (i=1;i<=numnodes;i++)
     {
 	DictionaryNode N = GetNode(i);
-	fprintf(fp, "%-6ld %-6ld %c%c %2d (%c)\n", (long)i,
+	fprintf(fp, "%-6ld %08lX %-6ld %c%c %2d (%c)\n", (long)i,
+			N.Raw(),
 			(long)N.FirstChild(), N.IsTerminal()?'T':' ',
 			N.IsLastPeer()?'L':' ',
 			(int)N.Index(), N.Char());
     }
-#ifndef OLD_GETNODE
+#ifdef IS_FOR_PALM
     FreeRecords();
 #endif
 }
 
 #endif // DUMP
-

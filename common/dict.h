@@ -1,10 +1,22 @@
 #ifndef DICT_H
 #define DICT_H
 
+#ifdef WORDFINDPRO
+#include "regex.h"
+#endif
+
+#define FIX_ANY		':'
+#define FIX_VOWEL	'*'
+#define FIX_CONSONANT	'='
+#define FLT_ANY		'.'
+#define FLT_VOWEL	'+'
+#define FLT_CONSONANT	'-'
+
 #define USEALL	0
 #define PREFIX	1
 #define SUFFIX	2
 #define MULTI	3
+#define REGEX	4
 
 #define ALL	    (0x3FFFFFFl)
 #define VOWELS      ((1l<<0) | (1l<<4) | (1l<<8) | (1l<<14) | (1l<<20))
@@ -19,6 +31,8 @@ const char *ltoa(unsigned long l);
 //#define NodesPerRecord		1000 // version 1.8 and befor
 #define NodesPerRecord		4096
 #define DictDBType		'dict'
+
+#ifdef VARVECT
 
 class VariableSet
 {
@@ -69,11 +83,11 @@ class VariableSet
     }
     void ClearUsed()
     {
-        memset((char*)used, (char)0, 26*sizeof(long));
+        memset((char*)used, (unsigned char)0, 26*sizeof(long));
     }
     void ResetConstraints()
     {
-        memset((char*)constraints, (char)0xff, 26*sizeof(long));
+        memset((char*)constraints, (unsigned char)0xff, 26*sizeof(long));
     }
     void SetConstraint(int v, unsigned long m)
     {
@@ -89,10 +103,9 @@ class VariableSet
     }
     void ComputeConstraints();
     VariableSet()
-    { }
-    void Init()
     {
         ClearAssignments();
+	ClearUsed();
 	ResetConstraints();
     }
     void Print(char *buf, int v) const;
@@ -101,41 +114,53 @@ class VariableSet
     {}
 };
 
+#endif
+
+
+#define MAXWORDLEN	(32)
+
 class DictionaryDatabase
 #ifdef IS_FOR_PALM
     : public Database
 #endif
 {
-#ifdef IS_FOR_PALM
-    class Form *owner;
-#else
+#ifndef IS_FOR_PALM
     char dbname[32];
 #endif
     int nodesize;
     int allocpool[26], fixedpool[26], maxpool[26], need[26];
     int varset[26], refcount[27];
 
+#ifdef VARVECT
     VariableSet *vars;
+#endif
 
     // node stack for non-recursive matching
-    unsigned long nstk[30];
+    unsigned long nstk[MAXWORDLEN+1];
     int sp, start, laststart, stop, vecoff, swcnt;
     int stepnum, matches, progress;
-    int starts[32];
+    int starts[MAXWORDLEN];
     unsigned long anchormasks[MAXPATLEN],
-    		  varpool[MAXPATLEN], 
+    		  varpool[32], 
 		  pmask;
     int vlen, plen, wildfloats, vtot;
-    int matchtype, mincnt, maxcnt, minlen, maxlen; //, idx;
-    int numlens, lennow, wlen[32], vpos[32];
+    int matchtype, mincnt, maxcnt, minlen, maxlen, totlen; //, idx;
+    int numlens, lennow;
+    int word_lengths[MAXWORDLEN];
+    int start_offset_in_pat[MAXWORDLEN];
     char lastmulti[80];
     int progpoint;
     int has_float_ranges;
     int simple_search;
     int has_place_constraints;
     int has_wordend_constraints;
+#ifdef USE_REGEXP
+    class WFRegExp *re;
+    unsigned long remask, minmask;
+#endif
 
-#ifdef UNIX // UNIX dawg is differnt for i386
+#if 0 // legacy
+//#ifdef UNIX // UNIX dawg is differnt for i386
 #define TVSH	29
 #define PVSH	30
 #define IVSH	24
@@ -150,20 +175,17 @@ class DictionaryDatabase
 #define FIRSTNODE	(1l)
 #endif
 
-    virtual Boolean OnOpen();
+//    virtual Boolean OnOpen();
+//    virtual void OnClose();
   public:
-    static const char *MatchTypeName(UInt t);
-    static const char *LimitName(UInt n);
-#ifdef IS_FOR_PALM
-    void SetProgressOwner(Form *o)
-    {
-        owner = o;
-    }
-#endif
+    static const char *MatchTypeName(UInt16 t);
+    static const char *LimitName(UInt16 n);
+#ifdef VARVECT
     VariableSet *GetVariables() const
     {
         return vars;
     }
+#endif
     unsigned long LetterMask(char c)
     {
         return (1ul << (c-'A'));
@@ -175,13 +197,17 @@ class DictionaryDatabase
 	DictionaryNode(unsigned long v_in = 0)
 	    : v(v_in)
 	{ }
+	inline unsigned long Raw() const
+	{
+	    return v;
+	}
         inline int IsTerminal() const
         {
-            return (int)((v>>TVSH)&1);
+            return (v&(1l<<TVSH))!=0;
         }
         inline int IsLastPeer() const
         {
-            return (int)((v>>PVSH)&1);
+            return (v&(1l<<PVSH))!=0;
         }
         inline int Index() const
         {
@@ -209,24 +235,25 @@ class DictionaryDatabase
 #endif
     };
   protected:
-    DictionaryNode Nstk[30];
+    DictionaryNode Nstk[MAXWORDLEN];
     int Node2Record(unsigned long n)
     {
         return (int)(n/NodesPerRecord);
     }
 
-#ifndef OLD_GETNODE
-    VoidHand *handles;
+#ifdef IS_FOR_PALM
+    MemHandle *handles;
+#endif
     unsigned char **records;
-    void InitRecords();
+
   public:
+    void InitRecords();
     void FreeRecords();
   protected:
-#endif
     
     unsigned char *current_record;
 #ifdef IS_FOR_PALM
-    VoidHand current_handle;
+    MemHandle current_handle;
 #else
     FILE *fp;
     int numrecords;
@@ -234,7 +261,7 @@ class DictionaryDatabase
 #endif
     int current_recnum;
 
-    void ShowProgress(DictionaryNode &N);
+    void ShowProgress();
     int FindPoolAllocation(unsigned pos, int tot, int wilds,
 			   unsigned long pmask = 0xfffffffful);
     int RemoveFromPool(int c);
@@ -245,9 +272,12 @@ class DictionaryDatabase
     unsigned long NextPatternElt(char *&pat, int &is_float, int &is_single);
     char *NextPat(char *pat, int pos);
     void InitStack(int l, int first_vec);
-    void GetWord(char *word, int stacklen);
-    int NextSingleWordAllLettersStep(char *line);
+    unsigned long GetUInt16(char *word, int stacklen);
+//    int NextSingleUInt16AllLettersStep(char *line);
     int NextStep(char *line);
+#ifdef USE_REGEXP
+    int NextREStep(char *line);
+#endif
     DictionaryNode GetNode(unsigned long n);
     void Reinitialise();
     virtual int MustStop();
@@ -255,13 +285,22 @@ class DictionaryDatabase
     void RecursiveDump(int pos, long n, FILE *ofp);
 #endif
   public:
-    void InitDB();
+    int InitDB();
     int StartConsult(char *pat, int type_in = USEALL,
     			int multi_in = 0,
     			int minlen_in=0, int maxlen_in=0, 
 			int mincnt_in=0, int maxcnt_in=0,
+#ifdef VARVECT
 			VariableSet *vars_in=0);
+#else
+			void *vars_in = 0);
+#endif
+    int StartConsult(const char *tmplate, const char *anagram);
     int NextMatch(char *line, int len);
+#ifdef USE_REGEXP
+    int StartREConsult(const char *regexp_in);
+    int NextREMatch(char *line, int len);
+#endif
     void Reset();
     inline int Matches() const
     {
@@ -278,7 +317,7 @@ class DictionaryDatabase
 #endif
     {
 #ifdef IS_FOR_PALM
-        return Database::Open(DictDBType, dmModeReadOnly);
+        return Database::OpenByType(DictDBType, dmModeReadOnly);
 #else
 #ifdef UNIX
 	fp = fopen((fname ? fname : "dawg"), "rb");
@@ -294,11 +333,9 @@ class DictionaryDatabase
     void Dump(FILE *fp);
 #endif
 #ifdef IS_FOR_PALM
-    DictionaryDatabase() : Database() {}
-    void Init();
+    DictionaryDatabase();
 #else
-    DictionaryDatabase() {}
-    void Init(const char *fname = 0);
+    DictionaryDatabase(const char *fname = 0);
 #endif
     virtual ~DictionaryDatabase();
 };
@@ -308,4 +345,5 @@ void ShowVector(unsigned long *vec);
 #endif
 
 #endif
+
 

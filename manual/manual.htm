@@ -3,46 +3,66 @@
 <head>
    <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
    <meta name="Author" content="Graham Wheeler">
-   <meta name="GENERATOR" content="Mozilla/4.7 [en] (Win95; I) [Netscape]">
+   <meta name="GENERATOR" content="Mozilla/4.75 [en] (Win95; U) [Netscape]">
    <title>manual</title>
 </head>
 <body>
 
-<center><b><font size=+3>PalmWord++ v1.8</font></b>
+<center><b><font size=+3>WordFind++/WordFindPro</font></b>
 <br><font size=+2>by Graham Wheeler</font>
 <br><i>gramster@bigfoot.com</i></center>
 
 <p><br>
 <br>
 <br>
-<br>
-<br>
-<br>
+<p><b><font size=+2>0. Release Information</font></b>
+<p>This document describes WordFind++ v2.4 and WordFindPro v1.4.
+<br>&nbsp;
 <p><b><font size=+2>1. Introduction</font></b>
-<p>PalmWord++ is a powerful dictionary searching program for use with word
-games line Scrabble, Target and crosswords. You can use it to generate
-lists of anagrams and words, given a set of constraints on the available
-letters and their positions.
-<p>To use PalmWord++, you must also install one of the dictionary databases
-it comes with for it to search. At present, PalmWord++ only supports the
-loading of one dictionary at any one time.
+<p>WordFind++ and WordFindPro are powerful dictionary searching programs
+for use with word games like Scrabble, Target, crosswords, and codewords/cryptograms.
+You can use them to generate lists of anagrams and words, given a set of
+constraints on the available letters and their positions.
+<p>WordFindPro has all of the functionality of WordFind++, plus the ability
+to have multiple dictionaries resident at the same time, and switch between
+them freely. WordFindPro also includes a Win32 dictionary maintenance program
+(FreeBSD or Linux executables available to registered users upon request).
+In addition, WordFindPro supports UNIX regular-expression style searches
+(single word only), and supports the use of numeric placeholders for letters,
+which can be used when solving cryptograms and substitution ciphers (this
+feature was included in WordFind++ in earlier versions but has been removed
+as it belongs only in the more powerful capabilities of WordFindPro).
+<p>There is a WordFindLite program available which has the basic functionality
+of WordFind++ but with a much simplified user interface. If all you wish
+to do is use these programs for finding anagrams and finding words that
+fit in partially completed crossword grids you may prefer the simplicity
+of WordFindLite.
+<p>To use WordFind++, you must also install one of the dictionary databases
+it comes with for it to search. To use WordFindPro, you must install <i>at
+least </i>one of the dictionary databases it comes with; you can also install
+more than one and choose between them before starting a search.
 <p>The currently available dictionaries are:
-<p><b>demo.pdb</b> - the dictionary that comes with the trial version of
-PalmWord++, this has about 28,000 words.
+<p><b>demo.pdb</b> - the dictionary that comes with the trial versions
+of WordFind++ and WordFindPro, this has 30,240 words, of up to 9 letters
+in length.
 <p><b>ospd3.pdb</b> - for Scrabble players, this dictionary is made from
-the OSPD3 word list of about 116,000 words.
-<p><b>meddict.pdb</b> - this medium sized dictionary consists of the OSPD3
-word list together with about 23,000 proper nouns.
-<p><b>tour.pdb</b> - a Scrabble tournament dictionary of about 170,000
-words up to 15 characters in length.
-<p><b>bigdict.pdb</b> - this large dictionary has over 266,000 entries.
-<p>None of the dictionaries have words longer than 13 letters, other than
-the Scrabble tournament dictionary. The trial version may be used with
-the <b>demo.pdb</b> dictionary only. Unauthorised redistribution of the
-other dictionary database files is not permitted.
+the OSPD3 word list of&nbsp; 116,887 words of up to 13 characters in length..
+<p><b>small.pdb</b> - a crossword dictionary of 52,033 common words.
+<p><b>medium.pdb</b> - a medium sized crossword dictionary of 133,426 words.
+<p><b>large.pdb</b> - this large crossword dictionary has 229,428 words.
+<p><b>huge.pdb</b> - this very large dictionary has 345,195 entries (WordFindPro
+only).
+<p><b>scrabtor.pdb</b> - a Scrabble tournament dictionary of 173,866 words
+(WordFindPro only)
+<p>The trial versions may be used with the <b>demo.pdb</b> dictionary only.
+Unauthorised redistribution of the other dictionary database files is not
+permitted.
+<p>In the rest of this document, we will refer to WordFind most of the
+time - this applies to both WordFind++ and WordFindPro. We refer to WordFindPro
+only when discussing the additional features of WordFindPro.
 <br>&nbsp;
 <p><b><font size=+2>2. Quick Start</font></b>
-<p>Section 3 provides a detailed description of how to use PalmWord++.
+<p>Section 3 provides a detailed description of how to use the programs.
 This section provides a quick introduction which will allow you to do the
 most common types of searches.
 <p><b><font size=+1>General Crossword Help</font></b>
@@ -52,36 +72,55 @@ most common types of searches.
 make sure the button at the bottom right is set to "Anchored"</li>
 
 <li>
-enter the word or words in the pattern field. For positions where the lettter
+enter the word or words in the pattern field. For positions where the letter
 is unknown, press the "Any" button, which will insert a ":" character at
 that position. For multi-word clues, use the "|" character to mark the
-end of one word and start of the next (there is a shortcur button for this
+end of one word and start of the next (there is a shortcut button for this
 character on the screen)</li>
 
 <li>
-press the "Go!" button to start the search</li>
+enter a newline in the graffiti area or tap on the "Go!" button to start
+the search</li>
 </ul>
-<b><font size=+1>Finding Anagrams</font></b>
+For example, if you have a four letter clue with word lengths 2,4,2,4 and
+you know the first letter of each word are A, G, A and G respectively,
+you would enter the pattern "A:|G:::|A:|G:::".
+<p>(In this case, the cryptic clue is "Behaviour deserving top trophy",
+and the answer is "As good as gold").
+<p><b><font size=+1>Finding Anagrams</font></b>
 <p>The procedure for finding anagrams is identical to the above, except
-that you should first ensure that the button at the bottom right of the
-Main form is set to "Floating" instead of "Anchored".
+that you should&nbsp; ensure that the button at the bottom right of the
+Main form is set to "Floating" instead of "Anchored" before you enter the
+word(s) that you want to find anagrams of.
 <p>For multi-word anagrams, check the Multi checkbox before starting the
 search (if the word breaks can occur anywhere) or use the "|" character
-as before to mark specific positions as word breaks.
+as before to mark specific positions as word breaks (as in a crossword
+anagram clue). For example, if you had a crossword clue "Wicked television
+arrangement (4,3,3)" which you guessed was an anagram of "television",
+you could enter "tele|vis|ion" to find all possible matches. (The answer,
+in this case, is "evil ion set").
+<p><b><font size=+1>Regular Expression Searches (WordFindPro Only)</font></b>
+<p>To do regular expression searches, tap on the "Pattern:" prompt on the
+Main Form. The screen will change to a form for entering regular expressions.
+Enter a regular expression and tap on the Go! button. In brief, the regular
+expressions support the *, + and ? operators, the . wild character, the
+^ and $ start- and end-of-word markers, and character ranges. Grouping
+with parentheses is not supported as yet, nor is the choice operator |.
+<p>Tapping on the "RegExp:" prompt changes back to the normal lookup screen.
 <p><b><font size=+1>What's Missing in this Quick Start</font></b>
 <p>Anagram hunting and crossword clue assistance are the most common uses
-of PalmWord++, and you don't need to know much more than this to get lots
-of benefit from the program. However, PalmWord++ supports far more complicated
+of WordFind, and you don't need to know much more than this to get lots
+of benefit from the program. However, WordFind supports far more complicated
 types of searching than this, including the ability to search for words
 with known prefixes and suffixes (such as words beginning with `post'-
 or words ending in `-tion'), and the ability to use numeric placeholders
 (variables) to specify letters; this is useful in the type of crossword
-known as a codeword, where each square is labelled with a number from 1
+known as a codeword, where each square is labeled with a number from 1
 through 26 corresponding to a letter, and no clues are given. If you need
 this sort of functionality, you should read and understand the next section.
 <br>&nbsp;
 <p><b><font size=+2>3. Detailed Description</font></b>
-<p>The method usedby PalmWord++ for searching&nbsp; is fairly complex but
+<p>The method used by WordFind for searching&nbsp; is fairly complex but
 worth understanding if you want to make full use of it. Underlying each
 search are two pieces of information:
 <ul>
@@ -108,9 +147,9 @@ R, O, P and E;</li>
 for anagrams of ROPE that begin with R and have P in the third place the
 template is "R#P#" and the letter pool consists of an O and an E.</li>
 </ul>
-Given a template and a letter pool, PalmWord++ tries to find matches by
-plugging different letters from the letter pool into different positions
-in the template.
+Given a template and a letter pool, WordFind tries to find matches by plugging
+different letters from the letter pool into different positions in the
+template.
 <p><b><font size=+1>Match Types</font></b>
 <p>In the Main form, you can choose what type of match to use. There are
 three possibilities, and each possibility can also be used in either single
@@ -129,7 +168,7 @@ template;</li>
 </ul>
 The prefix and suffix matches can be illustrated by continuing with our
 last example. That is, we have template "R#P#" and letter pool "O,E". Using
-prefix matching, PalmWord++ would find words that match any of the following
+prefix matching, WordFind++ would find words that match any of the following
 situations:
 <br>&nbsp;
 <table BORDER COLS=2 WIDTH="50%" >
@@ -184,7 +223,7 @@ situations:
 </tr>
 </table>
 
-<p>Using suffix matching, PalmWord++ would instead find matches of:
+<p>Using suffix matching, WordFind++ would instead find matches of:
 <br>&nbsp;
 <table BORDER COLS=2 WIDTH="50%" >
 <tr>
@@ -238,7 +277,7 @@ situations:
 </tr>
 </table>
 
-<p>Thus with prefix matching, PalmWord++ will see if any of the following
+<p>Thus with prefix matching, WordFind++ will see if any of the following
 are valid words:
 <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; R&nbsp;&nbsp;&nbsp; RO&nbsp;&nbsp; RE&nbsp;&nbsp;
 ROP&nbsp;&nbsp; REP&nbsp;&nbsp; ROPE&nbsp;&nbsp; REPO
@@ -247,16 +286,16 @@ ROP&nbsp;&nbsp; REP&nbsp;&nbsp; ROPE&nbsp;&nbsp; REPO
 PO&nbsp;&nbsp; PE&nbsp;&nbsp;&nbsp; OPE&nbsp;&nbsp; EPO&nbsp;&nbsp;&nbsp;
 ROPE&nbsp;&nbsp;&nbsp; REPO
 <p>Actually, this is not strictly true. Because the letter pool can contain
-wildcards and letter ranges as well as specific letters, if PalmWord++
-were to consider every possible permutation, some searches would take infinitely
-long (effectively, anyway), due to the exponential explosiion in the number
-of possible arrangements. Instead, PalmWord++ walks through the dictionary,
+wildcards and letter ranges as well as specific letters, if WordFind were
+to consider every possible permutation, some searches would take infinitely
+long (effectively, anyway), due to the exponential explosion in the number
+of possible arrangements. Instead, WordFind walks through the dictionary,
 and checks which words in the dictionary can correspond to the template
 and letter pool. This can make some searches much slower, but does mean
 that there is a finite and not too large number of matches that must be
-done, and thus it is guaranteed to find all matches within a reasonable
-space of time. Of course, this is mainly true for single words - once you
-start searching for multi-word matches there is once again an explosion
+done, and thus it is guaranteed to find all matches within a "reasonable"
+amount of time. Of course, this is mainly true for single words - once
+you start searching for multi-word matches there is once again an explosion
 of possibilities, that even an efficient algorithm can choke on. Fortunately,
 if a search is taking too long for your liking, you can abort it at any
 time by pressing the Stop button in the Word form.
@@ -267,17 +306,17 @@ time by pressing the Stop button in the Word form.
 <p><b><font size=+1>Specifying Search Patterns</font></b>
 <p>When making consultations, you don't explicitly specify the template
 and letter pool as two separate pieces of information. Rather, you specify
-a single pattern, which PalmWord++ can split into a template and pool.
+a single pattern, which WordFind can split into a template and pool.
 <p>In the simplest case a pattern is a sequence of letters (whitespace
 may be present but is ignored). The letters may be either upper case or
 lower case, the former meaning that the letter must occur in that position
-(i.e.the letter&nbsp; is a template constraint), while lower case means
+(i.e. the letter&nbsp; is a template constraint), while lower case means
 the letter need not be in that position (i.e. it is a letter in the letter
 pool). Thus our example above could be specified as "RoPe", or equivalently
 as "RePo".
 <p>A few more examples should help here. It should be clear by now that
-the order of lettters in the template is fixed and significant, while the
-order of letters in the pool is arbirtrary.
+the order of letters in the template is fixed and significant, while the
+order of letters in the pool is arbitrary.
 <br>&nbsp;
 <table BORDER COLS=3 WIDTH="59%" >
 <tr>
@@ -373,10 +412,16 @@ crossword lookup, with two known letters only (see below for a further
 explanation of these last two patterns).
 <p>Elements in the pattern that correspond to elements in the template
 are called "anchored", while elements in the pattern that go in the letter
-pool are called "floating".&nbsp; During pattern input PalmWord++ is either
-in "floating" mode (in which case letters are lower case by default) or
-"anchored" mode (in which case letters are upper case by default). A button
-on the Main form toggles between these two modes.
+pool are called "floating".&nbsp; During pattern input WordFind is either
+in "floating" mode (in which case letters are entered in lower case by
+default) or "anchored" mode (in which case letters are entered in upper
+case by default). A button on the Main form toggles between these two modes.
+<i>Note
+that the button only affects the default letter case of subsequently entered
+letters; it does NOT affect the actual search. If a letter appears in upper
+case in the pattern it is anchored, irrespective of the current setting
+of the input mode button, and similarly for lower case floating characters.</i>
+<br>&nbsp;
 <p><b>Letter Ranges</b>
 <p>Patterns can also have `letter ranges' enclosed in brackets, such as
 `[A-Z]' (any letter), `[AEIOU]' (any one vowel) or `[A-MZ]' (any one of
@@ -386,11 +431,11 @@ The&nbsp; case of the first letter in the range determines whether the
 range will be used as a word template constraint or as a letter pool entry;
 other than this letter case is ignored. Thus, for example, "[a-Z]" is legitimate
 and equivalent to "[a-z]". Similarly "[A-z]" is equivalent to "[A-Z]".
-<p>PalmWord++ will allow you to use any type of brackets, and mix different
+<p>WordFind will allow you to use any type of brackets, and mix different
 types of brackets (thus "{a-z)" is acceptable and equivalent to "[a-z]").
 <p>There are shortcut buttons on the Main form for entering the left and
 right brackets, minus sign, and caret for negating character ranges.
-<br>Section 4 describes the user interface of PalmWord++ in some detail.
+<br>Section 4 describes the user interface of WordFind in some detail.
 <p><b>Special Pattern Characters</b>
 <p>Patterns can also have some special characters. Each has an "upper case"
 (or anchored) and a "lower case" (or floating) form, analogous to letters.
@@ -464,8 +509,8 @@ case, must occur in the second position, as all other&nbsp; positions are
 in upper case and thus locked in place.
 <p>You cannot use these special characters within a range (thus for example,
 "[*y]" is not valid).
-<br>There are shortcut buttons in the Main form for enteriing these characters.
-The shortcut buttons are labelled "Any", "Vowel" and "Consonant", but will
+<br>There are shortcut buttons in the Main form for entering these characters.
+The shortcut buttons are labeled "Any", "Vowel" and "Consonant", but will
 insert the single corresponding character into the pattern when pressed.
 The actual character entered will depend on whether the program is in "anchored"
 mode or "floating" mode.
@@ -481,71 +526,117 @@ of a 3 letter word followed by a 4 letter word, and you think this is an
 anagram of teacher, you could use the pattern "tea|cher".
 <p>Be warned that multi-word anagram matching can be very time consuming,
 especially using the checkbox approach!
-<p><b>Using Variables</b>
-<p>You can use the numbers 1 through 26 to represent the letters (in fact,
-PalmWord++ allows you to use 0 as well, for those who prefer to start numbering
-from zero). This is mostly useful for a certain type of crossword puzzle
-often called a <i>codeword</i> , due to its relationship with simple secret
-codes (namely simple substitution ciphers). A codeword usually has no clues
-in the usual crossword sense, but instead each empty square in the grid
-is labelled with a number from 1 through 26. Each number corresponds to
-exactly one letter, and this corresponds holds true throughout the grid.
-For example,&nbsp; if the number 7 represents the letter G in a particular
-square, then all squares labelled with a 7 on that grid can be filled in
-with G's.
+<p><b>Using Variables (WordFindPro only)</b>
+<p>You can use the numbers 1 through 26 to represent letters. This is mostly
+useful for a certain type of crossword puzzle often called a <i>codeword</i>
+, due to its relationship with simple secret codes (namely substitution
+ciphers). A codeword usually has no clues in the usual crossword sense,
+but instead each empty square in the grid is labeled with a number from
+1 through 26. Each number corresponds to exactly one letter, and this correspondence
+holds true throughout the grid. For example,&nbsp; if the number 7 represents
+the letter G in a particular square, then all squares in the grid&nbsp;
+labeled with a 7 can be filled in with G's.
 <p>A single word example may be `1 2 2 1 3'. This pattern would match words
-such as ABBAS, ALLAY, TOOTH and TEETH. To enter such a pattern in PalmWord++,
+such as ABBAS, ALLAY, TOOTH and TEETH. To enter such a pattern in WordFind++,
 you must separate the numbers with spaces (there is a shortcut button for
 this). You can also specify a constraint&nbsp; on a variable by separating
 it from the number with a slash character. For example:
 <p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 1/[AEIOU] 2 2 1 3
 <p>&nbsp;is the same pattern as before except that the variable `1' must
 be a vowel.
-<p>All numeric variables are considered anchored; PalmWord++ does not yet
+<p>All numeric variables are considered anchored; WordFind++ does not yet
 support floating variables. If you specify a floating constraint (such
 as a lower case letter) it will be treated as the equivalent anchored constraint.
-<p>PalmWord++ will remember the possible assignments of letters to variables
-between searches and use these to constrict further searches. This is&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-useful to maintain consistent constraints while matching different words
-in the grid. You should be aware that this process can eliminate more than
-you would like, particularly if you interrupt searches or if a word on
-the grid happens to not be in the PalmWord++ dictionary you are using.
-You can discard the current constraints and start afresh at any stage selecting
-Reset Constraints from the Edit menu in the Main form, or by pressing the
-Rst button in the Variables form (see below for more about these).
+<p>WordFind will remember the possible assignments of letters to variables
+between searches and use these to constrain further searches. This is useful
+to maintain consistent constraints while matching different words in the
+grid. Be warned, however - this process can eliminate more than you would
+like, particularly if the word on the grid happens to not be in the WordFind
+dictionary you are using. Interrupting the search is another way in which
+the constraints can be improperly computed, and thus WordFind only records
+the constraints from a match after you have stepped through all the possible
+matches in the Word Form.
+<p>You can discard the current constraints and start afresh at any stage
+selecting Reset Constraints from the Edit menu in the Main form, or by
+pressing the Rst button in the Variables form (see below for more about
+these).
 <p>As you become confident about the associations between the numbers and
 the letters in the grid you can start using variable assignments. Assignments
 differ from constraints in that they are made explicitly by the user, are
 reset separately, and must be of a single letter to a variable (whereas
 the constraints are of character ranges that can match the variables).
 To assign a letter to a variable, you need to tap on the variable in the
-Variable form. That pops up the Variable Asignment dialog. You can clear
+Variable form. That pops up the Variable Assignment dialog. You can clear
 all variable assignments by pressing Clr in the Variable form or by selecting
 Clear Assignments from the Edit menu in the Main form.
+<br>&nbsp;
 <p><b><font size=+1>Word Length and Count Constraints</font></b>
 <p>You can specify minimum and maximum word lengths for prefix, and suffix,
-and the minimum and maximum number of words allowed
-<br>per match for multi-word matching. If these are set to the default
-they will have no effect. They can be useful when generating multi-word
-<br>anagrams with patterns that contain several A's or I's, as PalmWord++
-will likely&nbsp; churn out thousands of matches in these cases starting
-<br>with the words `A', `AA', and/or `I'. Setting the minimum length to
-three (for example) can help prevent this.
+and the minimum and maximum number of words allowed per match for multi-word
+matching. If these are set to the default they will have no effect. They
+can be useful when generating multi-word anagrams with patterns that contain
+several A's or I's, as WordFind will likely&nbsp; churn out thousands of
+patches in these cases starting with the words `A', `AA', and/or `I'. Setting
+the minimum length to three (for example) can help prevent this.
 <p><b><font size=+1>A Tip for Multi-Word Anagrams</font></b>
 <p>Quite often there will be thousands of possible anagrams and it becomes
-impossible to hunt down the good ones. There is a
-<br>technique to help in this case - look through some of the possibilities,
-and select a word you think is appropriate in the final anagram.
-<br>Then subtract this word from the input, and see what words can be made
-from the remaining letters. For example, consider
-<br>VEGETARIAN. We see that some anagrams have the word RAVE, and decide
-to use this. This means we must find anagrams of the remaining
-<br>letters, namely GETIAN. We find the word EATING. Thus VEGETARIAN=EATING
+impossible to hunt down the good ones. There is a technique to help in
+this case - look through some of the possibilities, and select a word you
+think is appropriate in the final anagram. Then subtract this word from
+the input, and see what words can be made from the remaining letters. For
+example, consider VEGETARIAN. We see that some anagrams have the word RAVE,
+and decide to use this. This means we must find anagrams of the remaining
+letters, namely GETIAN. We find the word EATING. Thus VEGETARIAN=EATING
 RAVE.
+<p><b><font size=+1>Using Regular Expressions (WordFindPro Only)</font></b>
+<p>WordFindPro also supports UNIX-style regular expression searches of
+the dictionary. These are done from a different form to the main form;
+to access this form tap on the "Pattern:" prompt in the main form. Similarly,
+to return to the main form, tap on the "RegExp:" prompt in the regular
+expression form.
+<p>The regular expression form maintains its own history of past searches.
+The edit menu is still accessible from this form as well.
+<p>The regular expressions that are supported are quite basic. Only single
+word matches are allowed. As in most regular expression languages, character
+ranges are supported. Ranges can be negated by starting them with the "^"
+character; thus "[^aeiou]" represents a consonant. A period is used for
+"any character", which is equivalent to "[a-z]". To force a match from
+the start of the word, start the regular expression with a "^"; to force
+a match to the end of the word, terminate the regular expression with a
+"$" character.
+<p>Three operators are supported: a "?" meanns the preceding character
+or character range is optional ("zero or one of"). A "+" means there must
+be at least one of the preceding character or range, but there may be more
+than one. A "*" means there may be any number of the preceding character
+or range, including zero (none).
+<p>Some examples should help to illustrate this.
+<br>&nbsp;
+<blockquote>"^ab...ion$" matches eight-letter words starting with "ab"
+and ending with "ion".
+<p>"^ab.*ion$" matches all words that start with "ab" and end with "ion".
+<p>"^ab.+ion" matches words of at least six characters that start with
+"ab" and end with "ion"
+<p>"^ab.*ion" matches words that start with "ab" and contain the sequence
+"ion"
+<p>"ion" matches words that contain the sequence "ion"
+<p>"a.*a.*a.*a" matches words that contain at least four instances of the
+letter "a"
+<p>"^[aeiou]" matches words that start with a vowel
+<p>"[aeiou][aeiou][aeiou]" matches words that have at least three vowels
+in a consecutive sequence
+<p>"io?n" matches words that contain either "ion" or "in"</blockquote>
+
+<p><br>All of the special characters have shortcut buttons in the form
+to speed up regular expression entry. WordFindPro does not yet support
+the grouping of subexpressions with parentheses, although this capability
+may be added later; similarly, the choice operator "|" is not yet supported
+but may be later.
 <br>&nbsp;
 <p><b><font size=+2>4.The User Interface</font></b>
-<p><img SRC="main1_8.JPG" height=160 width=160 align=ABSCENTER> The Main
-Form
+<p>The Main form is slightly different for each program:
+<p><img SRC="main++.jpg" height=160 width=160 align=ABSCENTER> WordFind++
+<p><img SRC="mainpro.jpg" height=160 width=160 align=CENTER> WordFindPro
+(note the popup trigger for selecting the dictionary).
 <p>The Main Form is what you see when you start up the program. The various
 controls are:
 <ul>
@@ -577,7 +668,7 @@ checkbox not checked) they are ignored and can't be edited.</li>
 <li>
 Word Counts - similar to the word lengths, these controls can be used to
 set a range of acceptable number of words in matches. The controls are
-only enabled and only have effect ifthe multi-word match checkbox is checked.</li>
+only enabled and only have effect if the multi-word match checkbox is checked.</li>
 
 <li>
 Shortcut buttons - there are several shortcut buttons for entering pattern
@@ -587,27 +678,32 @@ for the space character, useful for separating variable numbers (spaces
 in patterns are otherwise ignored).</li>
 
 <li>
-An input mode toggle button, which toggles state between "Anchored" mode
-and "Floating" mode. When in "anchored" mode, letter case shift is enabled
-(so letters are entered by default in upper case), and vice-versa.</li>
+An input mode toggle button, which toggles state between "Anchored" input
+mode and "Floating" input mode. When in "anchored" input mode, letter case
+shift is enabled (so subsequent letters are entered by default in upper
+case), and vice-versa.</li>
 
 <li>
 Three shortcut buttons for specific character ranges, namely vowels, consonants,
 and any character. These will enter the characters "*", "=", ":" respectively
-in anchored mode, or "+", "-", and ":" respectively in floating mode.</li>
+in anchored input mode, or "+", "-", and ":" respectively in floating input
+mode.</li>
 </ul>
-<img SRC="matchtype1_8.JPG" height=160 width=160 align=ABSCENTER> This
+WordFindPro includes an extra list box trigger, which can be used to pop
+up a list of available dictionaries and allow you to choose the one to
+use for subsequent searches.
+<br>&nbsp;
+<p><img SRC="matchtype.jpg" height=160 width=160 align=ABSCENTER> This
 is the dialog box for selecting the type of matching to use
-<p><img SRC="wordcount1_8.JPG" height=160 width=160 align=ABSCENTER> This
-is the dialog for selecting a minimum word count. The one for a maximum
-word count is almost identical.
-<p><img SRC="wordlengths1_8.JPG" height=160 width=160 align=ABSCENTER>
-This is the dialog for selecting the minimum word length for multi-word
-matching.
-<p>After pressing Go! PalmWord++ will display the matches found in the
-Word Form, shown below (note that this does <i>not </i>correspond to the
-pattern shown earlier!):
-<p><img SRC="word1_8.JPG" height=160 width=160 align=ABSCENTER>&nbsp; The
+<p><img SRC="wordcount.jpg" height=160 width=160 align=ABSCENTER> This
+is the dialog for selecting a minimum word count.
+<p><img SRC="wordlength.jpg" height=160 width=160 align=ABSCENTER> This
+is the dialog for selecting the minimum word length for multi-word matching.
+<p>The dialogs for entering the maximum word count and maximum word length
+are identical apart from their titles.
+<p>After pressing Go! in the Main Form, WordFind will display the matches
+found in the Word Form, shown below.
+<p><img SRC="word.jpg" height=160 width=160 align=ABSCENTER>&nbsp; The
 Word Form, displaying the partial results of a pattern search.
 <p>The controls in the Word Form are:
 <ul>
@@ -621,21 +717,17 @@ Redo - start displaying the matches again from the first screen</li>
 New - go back to the Main Form to start a new search</li>
 
 <li>
-Vars - display the current variable constrainst and assignments</li>
+Vars - display the current variable constraints and assignments</li>
 
 <li>
-Stop! - while PalmWord++ is busy searching for matches, you can press this
+Stop! - while WordFind is busy searching for matches, you can press this
 button to abort the search.</li>
 </ul>
 If you press the Vars button, the Variable Form will be displayed. This
 is shown below:
 <br>&nbsp;
-<p><img SRC="vars1_8.JPG" BORDER=0 height=160 width=160 align=ABSCENTER>
-The Variable Form, showing some computed variable constraints
-<p>Constraints on variables that are computed as the result of pattern
-matches are shown with the variable number separated from the letters by
-a ">" character. If the variable has been explicitly assigned a value,
-it will be shown separated from a single letter by a "!" character.
+<p><img SRC="vars.jpg" BORDER=0 height=160 width=160 align=ABSCENTER> The
+Variable Form, showing some computed variable constraints and one assignment
 <p>There are three buttons at the top right, namely:
 <ul>
 <li>
@@ -652,30 +744,137 @@ You can assign a value to a variable by tapping on its entry in the list.
 This will pop up the Set Variable dialog shown below, from which you can
 associate a specific letter with a variable (effectively making it a constant)
 or break the association and make the variable variable once more.
-<p><img SRC="setvar1_8.JPG" height=160 width=160 align=ABSCENTER> The Set
-Variable dialog, with the selected variable currently set to be `B'.
+<p><img SRC="setvar.jpg" height=160 width=160 align=ABSCENTER> The Set
+Variable dialog, with the selected variable currently set to be `R'.
+<p>When in the Main Form, you can access a menu bar with two menus. the
+Edit Menu and the Help Menu. The Help Menu has just one selection, namely
+`About WordFind. The Main Menu is shown below:
+<p><img SRC="mainmenu.jpg" height=160 width=160 align=CENTER>
+<p>Many of these are standard operations for Palm apps for text editing.
+The ones specific to WordFind are:
+<ul>
+<li>
+<b>Clear Assignments</b> This clears any numeric variable assignments.
+It is equivalent to tapping on "Clr"' in the Variable Form.</li>
+
+<li>
+<b>Show Constraints</b> This shows any computed variable constraints by
+popping up the Variable Form (equivalent to tapping on the "Vars" button
+in the Word Form).</li>
+
+<li>
+<b>Reset Constraints </b>This discards any computed numeric variable constraints.
+It is equivalent to tapping on "Rst" in the Variable Form.</li>
+
+<li>
+<b>Delete Dictionary </b>This allows you to delete dictionary databases
+from your device.</li>
+</ul>
+If you tap on the "<b>Pattern:</b>" prompt in the Main Form in WordFindPro,
+you will get the Regular Expression form. This is similar to the Main Form
+but does not include the controls for word length and counts, or match
+types. It also has a slightly different set of shortcut buttons:
+<p><img SRC="regexp.jpg" height=160 width=160 align=ABSCENTER>
+<p>Tapping on the "RegExp:" prompt in the Regular Expression form will
+return you to the Main Form.
 <br>&nbsp;
+<p><b><font size=+1>Using A Keyboard</font></b>
+<p>If you have a Palm keyboard, you can make use of some additional key
+assignments (you can do this with Graffiti too but its more tedious than
+using the buttons on the screen). In the Main Form (or the Regular Expression
+form in WordFindPro), you can use the tilde character ~ to recall a history
+item; just enter a digit from 0 through 9 after the tilde. ~0 recalls the
+last pattern, ~1 the pattern before that, and so on.
+<p>In the Word Form, the following keys are equivalent to buttons on the
+screen:
+<ul>
+<li>
+Newline or PageDown, or the down scroll button on the Palm - equivalent
+to tapping the Next button</li>
+
+<li>
+'r', 'R' or the up scroll button - equivalent to tapping the Redo button</li>
+
+<li>
+'n', 'N', or backspace - equivalent to tapping the New button</li>
+
+<li>
+'v' or 'V' - equivalent to tapping the Vars button</li>
+</ul>
+
+<p><br><b><font size=+2>5. The Dictionary Manager (WordFindPro Only)</font></b>
+<p>WordFindPro includes a command-line utility for MS-Windows systems named
+<b>dictmgr.exe</b>.
+This program can be used to dump the contents of a .pdb dictionary database
+to a word list in an ASCII text file, and to produce .pdb dictionary files
+from word lists in ASCII text files.
+<p>To dump the words in a dictionary database to the screen, use the form:
 <br>&nbsp;
+<blockquote><b>dictmgr -d</b> <i>pdbfile</i></blockquote>
+
+<p><br>If you want to send the output to a file, you can use:
 <br>&nbsp;
-<p><b><font size=+2>5. Registration</font></b>
-<p>PalmWord++ is shareware, and costs US$15. The trial version can be used
-with the demo.pdb dictionary for 21 days for evaluation purposes. If you
-continue to use the program after that, you must pay for it. The full version
-can be purchased and downloaded from PalmGear Headquarters at http://www.palmgear.com.
-Registered users get access to other dictionaries and to future updates.
-<p>I have had some complaints about the fact that the demo dictionary is
-so limited. People have asked whether I couldn't instead put a time limit
-on the demo version after which is stops functioning. Such an approach
-is all very well for an application that builds up historical records (such
-as calendar and address book apps), but not for a program like PalmWord++,
-which is not highly dependent on data entered in the past. This may change
-in PalmWord++ v2.
+<blockquote><b>dictmgr -d -o </b><i>txtfile pdbfile</i></blockquote>
+
+<p><br>To build a .pdb dictionary from a word list in a text file, use:
 <br>&nbsp;
-<p><b><font size=+2>6. Disclaimer</font></b>
+<blockquote><b>dictmgr -n</b><i> name</i> <b>-o</b> <i>pdbfile txtfile</i></blockquote>
+
+<p><br>The name should be a short descriptive name. It must be quoted if
+it contains spaces. The input <i>txtfile</i> must have one word per line.
+You can specify up to 16 <i>txtfile</i>s on the command line and the word
+lists will be merged into a single .pdb file.
+<p>You can also do searches with the program, using the form:
+<br>&nbsp;
+<blockquote><b>dictmgr</b> [<b>-o </b><i>outputfile</i>] [<b>-w </b><i>minwords</i>]
+[<b>-W </b><i>maxwords</i>] [<b>-l </b><i>minlength</i>] [<b>-L </b><i>maxlength</i>]
+[<b>-Multi</b>] [<b>-t All</b>|<b>Prefix</b>|<b>Suffix</b>] <b>-?</b> <i>patternpdbfile</i></blockquote>
+for normal searches, and:
+<br>&nbsp;
+<blockquote><b>dictmgr </b>[<b>-o</b> <i>outputfile</i>] <b>-R </b><i>regularexpression
+pdbfile</i></blockquote>
+for regular expression searches. In the first case, the various arguments
+correspond to the various fields and selectors in the Main Form of the
+WordFind program.
+<p>The following example dumps the words in the large dictionary to an
+ASCII text file called words.txt:
+<br>&nbsp;
+<blockquote><b>dictmgr -d -o words.txt large.pdb</b></blockquote>
+
+<p><br>The next example recreates the large dictionary database from the
+dumped word list:
+<br>&nbsp;
+<blockquote><b>dictmgr -S -n "Large" -o large.pdb words.txt</b></blockquote>
+
+<p><br>Note that building a .pdb file can take quite a while, especially
+for large word lists!
+<p>The <b>-S</b> flag shown above tells <b>dictmgr</b> that the <b>words.txt</b>
+file is already sorted, which makes <b>dictmgr</b> start up faster and
+use less memory.
+<p>Here is an example of a search, to find all pairs of words of length
+4 or 5 characters, that can be made from the letters of the word <i>anonymously</i>
+using the medium dictionary:
+<br>&nbsp;
+<blockquote><b>dictmgr -w 2 -W 2 -l 4 -L 5 -t Prefix -Multi -? anonymously
+medium.pdb</b></blockquote>
+
+<p><br>A version of the dictionary manager is also available for FreeBSD
+upon request.
+<br>&nbsp;
+<p><b><font size=+2>6. Registration</font></b>
+<p>WordFind++ and WordFindPro are shareware, and cost US$8, US$10 and US$15
+respectively. The trial versions can be used with the demo.pdb dictionary
+for 21 days for evaluation purposes. If you continue to use any of the
+programs after that, you must pay for them. The full versions can be purchased
+and downloaded from PalmGear Headquarters at http://www.palmgear.com. Registered
+users get access to other dictionaries, to future updates, and to e-mail
+support.
+<br>&nbsp;
+<p><b><font size=+2>7. Disclaimer</font></b>
 <p>This software is provided "as is", and the author makes no warranties
 as to its fitness for any purpose.
 <br>&nbsp;
-<p><b><font size=+2>7. Version History</font></b>
+<p><b><font size=+2>8. Version History</font></b>
 <p>Note - I only started keeping track of this with version 1.4;&nbsp;
 the rest are as I can remember.
 <p><b>Changes in version 1.1</b>
@@ -694,7 +893,7 @@ temporarily switch to another application.
 <p>Made the button labels more meaningful.
 <p>Fixed some bugs in v1.4.
 <p><b>Changes in version 1.6</b>
-<p>Added a button shortcurt for `-'.
+<p>Added a button shortcut for `-'.
 <p>Reduced stack usage; the introduction of the history feature increased
 stack usage to such an extent that blowing the stack and crashing the Palm
 was possible in 1.4 and 1.5.
@@ -707,40 +906,147 @@ when changing the mode toggle.
 <p>Created HTML manual.
 <p>Changed the open mode of the dictionary to read-only to support flash
 RAM database residency.
-<p><b>Changes in version 1.8</b>
-<p>Fixed a bug in which letter input would switch to lower case after entering
-a backspace character.
+<p><b>Changes in version WordFind++ 1.8 / WordFindPro 1.0</b>
+<p>Fixed all known reproducible bugs.
 <p>Reimplemented variable support to work more intuitively.
+<p>Radically reduced stack requirements, moving much of the data that was
+previously allocated on the stack to the global variable space.
+<p>Added the dictionary maintenance program and split into two products.
+<p>Improved the speed of the searches.
+<p><b>Changes in WordFind++ 2.1 and WordFindPro 1.1</b>
+<p>WordFind++ 1.8 should really have been called WordFind++ 2.0, and so
+I'm jumping to 2.1 here which makes it easier to keep in sync with WordFindPro's
+version number.
+<p><b>dictmgr</b> will now sort the input word lists if necessary, and
+no longer requires the word lists to be presorted.
+<p>Added a Scrabble (tm) tournament dictionary to those shipped with WordFindPro.
+<p>Fixed a bug in the word length handling. If the minimum word length
+was set to some positive value but the maximum word length was set to `Any'
+then the word length settings didn't have any effect.
+<p>Fixed a bug in the drawing of the progress bar.
+<p>When you start a new search (by starting the application or tapping
+on New in the Word List form), the pattern is now cleared instead of being
+set to the last one used.
+<p>You can now use a newline in the graffiti area to start a search as
+an alternative to tapping on the Go! button.
+<p><b>Changes in WordFind++ 2.2 and WordFindPro 1.2 (31 April 2000)</b>
+<p>Added the additional key assignments to make it easier to drive WordFind
+from a keyboard
+<p>Fixed the version number shown in the About form.
+<p><b>Changes in WordFind++ 2.3 and WordFindPro 1.3 (June 2000)</b>
+<p>Fixed several bugs in the dictmgr program, and speeded it up a little.
+<p>The dictmgr program can now be used to do searches as well, which is
+much faster than doing them on the Palm device (although not usually as
+convenient).
+<p>Prefix/suffix matching wasn't working properly if the multi-word checkbox
+was enabled; this has been fixed.
+<p><b>Changes in WordFind++ 2.4 and WordFindPro 2.4 (March 2001)</b>
+<p>Change the names from PalmWordPro/++ to WordFindPro/++ to avoid trademark
+and copyright issues with Palm, Inc.
+<p>Updated the WordFindPro version number to 2.4, so that the two programs
+are consistent, to reduce confusion over which is more recent.
+<p>Added support for regular expressions to WordFindPro.
+<p>Improved error handling; syntax errors in search patterns are now reported
+as such, whereas before they would be reported as `no dictionary loaded'.
+<p>When WordFindPro is started, it will show the name of the default dictionary,
+instead of "Default". It will show "No dictionary" if no dictionary is
+loaded, as opposed to "Default".
+<p>Variable (numeric) placeholders have been removed from WordFind++.
+<p>The memory footprint of the programs has been reduced (although in WordFindPro
+this has been offset by the addition of the regular expressions).
+<p>Updated to use PalmOS SDK 3.5. Note that the programs now require PalmOS
+3.1 or later to run.
 <br>&nbsp;
-<p><b><font size=+2>8. Future Plans</font></b>
-<p>PalmWord++ is essentially the Consult feature from my MS-Windows crossword
-assistant program XWord, part of the WordsWorth shareware package (available
-from the Simtel archives in the win95\edu directory). I hope to eventually
-implement a more complete set of features from XWord (which allows you
-to enter partially completed crossword grids and uses the interrelated
-constraints to narrow searches further). Part of the difficulty is doing
-this within the constraints of the Palm's low screen resolution. Don't
-expect this anytime soon, as I haven't got much further than designing
-a scalable font.
-<p>In the shorter term, I aim to make the program support multiple simultaneously
-resident dictionary databases, and to allow a subset to be selected for
-searching. This is going to require more memory and CPU power, so it has
-its drawbacks. The main advantage is the fact that the dictionary can be
-split into&nbsp; subdictionaries according to word categories. For example,
-there could be separate dictionaries for boy's names, girl's names, place
-names, technical terms, religion and mythology, etc. This could help considerably
-for crosswords where such categories are known, as is quite often the case.
-I also plan to add a dictionary generation program to allow (registered)
-users to create their own dictionary databases. I expect these features
-to be in PalmWord++ v2.0, which should be available by Q2 of 2000.
+<p><b><font size=+2>8. Known Bugs/Limitations/Common Problems</font></b>
+<p>There are no known bugs in this release (there are some shortcomings,
+but that's what progress is all about!)
+<p>There are some limitations. Search patterns and regular expressions
+are restricted to 63 characters, while words are restricted to 31 characters.
+<p>You can have at most 32 floating elements in a pattern (more than this
+and WordFind will probably take forever to find anything anyway).
+<p>From questions I get asked by e-mail, I think I should just stress a
+few points:
+<p>You must load a dictionary .pdb file or WordFind will just show a "No
+dictionary!" error when you try to search.
+<p>Think of the search in terms of the two components of letter pool and
+word template. Imagine the letter pool as a group of letter tiles, some
+of which are like jokers or wildcards, although they may be restricted
+to sub-ranges of the alphabet (such as vowels). These tiles have to be
+placed into
+<br>a crossword like template, and some of them may have to be used in
+specific positions in that template.
+<p>The different pattern elements you enter each have to correspond to
+a single letter WordFind does not yet have support for regular expression
+type wildcards, such as `.*' which typically represents an arbitrary sequence
+of zero or more characters; i.e. they have variable length.
+<p>Remember the Floating/Anchored button is just like a Caps Lock button
+- it has no effect on characters already entered but sets the letter case
+for further input. It is the actual case of the letters as they appear
+on the display that determines whether they are fixed in position or floating.
+<p>To find all words that start with some known prefix, such as NEO for
+example, you would enter a pattern like "NEO::::::::::::" (remember `:'
+corresponds to `any letter'). You would select Prefix matching, with a
+minimum word length of 3. Similarly, to find words ending with a known
+suffix, such as OLOGY, you would enter a pattern like "::::::::::OLOGY",
+select Suffix matching, and specify a minimum word length of 5.
 <br>&nbsp;
-<p><b><font size=+2>9. Contacting the Author</font></b>
+<p><b><font size=+2>9. On the Economics of Shareware</font></b>
+<p>I occasionally get mail from people complaining that these programs
+are "too expensive". I also occasionally get mail from people who want
+to write shareware for the Palm platform asking me whether there is any
+money in it. The following comments may be of interest to both these groups.
+<p>Writing Palm applications involves a reasonable learning curve. Even
+once you know the APIs and the platform fairly well, it can be a frustrating
+experience. Many of the API routines do not check arguments, and passing
+bad arguments through can cause crashes at a later stage, so debugging
+can be a tedious and time consuming process.
+<p>I have not kept track of how much time I have spent on writing these
+programs, but I think that three months of full-time work is a reasonable
+estimate. My income from these programs has over the past year and a half
+has been approximately $2000. That is gross income. Once that is adjusted
+for income tax, and the cost of the development tools, it is closer to
+$1000. Which works out to about $20 per day of work.
+<p>This is certainly no way to make a living. If it wasn't for the fact
+that I use these programs myself, there is no way I could justify the amount
+of time I have spent developing them. Certainly the time spent on them
+is time I could have spent on pursuits that may have had much better payoffs,
+whether that be doing consulting work, or spending more time with my wife.
+<p>I think it may be possible to make a living writing programs for the
+Palm platform, but these would need to be for vertical markets and would
+have to be charged for based on contract programming rates. Alternatively,
+the program would have to have mass-market appeal, although even then it
+is questionable whether the work would pay for itself.
+<p>To those people who complain about the cost of the programs, I can simply
+say if you think they are too expensive, don't buy them. These programs
+are cheap - given the time spent on them, and the income generated from
+them, I am almost giving them away. It doesn't surprise me at all to see
+some people trying to charge up to $50 for Palm programs. That is the only
+way they will be able to recover their investment of time.
+<p>For those people who are considering writing shareware, be warned that
+you are very unlikely to make much money this way. But by all means go
+ahead anyway - you can get a lot of satisfaction from writing Palm programs.
+<p>On a more technical note, WordFind was written in C++, using a simple
+application framework built on top of PalmOS. I am currently documenting
+this framework, and will be submitting the code and the documentation to
+Dr Dobb's Journal, for possible publication late in 2001. The editors of
+DDJ have expressed lots of interest in this, so I think that the likelihood
+of publication is very good. People who may be interested in programming
+the Palm devices should keep an eye out for this article and code; I am
+sure it will greatly accelerate their learning curve.
+<br>&nbsp;
+<p><b><font size=+2>10. Contacting the Author</font></b>
 <p>I am always interested to hear bug reports, feature requests, and of
-novel uses for PalmWord++ (such as using it to solve puzzles in computer
+novel uses for WordFind (such as using it to solve puzzles in computer
 adventure games, substitution ciphers, and so on. Please mail any comments
 to <i>gramster@bigfoot.com</i>
-<p><i>Enjoy using PalmWord++!</i>
+<p>I am also interested in (non-copyrighted) word lists and dictionaries
+in other language, provided they use the 26 letter latin alphabet .Thus
+far, Ruud van der Ham has contributed a Dutch dictionary to me (as well
+as some useful shortcuts in WordFind++ 2.1/WordFindPro 1.1 and WordFind++
+2.2/WordFindPro 1.2). If any users want a copy of the Dutch dictionary,
+please contact me.
 <br>&nbsp;
-
+<p><i>Enjoy using WordFind!</i>
+<br>&nbsp;
 </body>
 </html>

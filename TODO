@@ -1,0 +1,16 @@
+Apparently sometimes the letter case isn't set to upper upon entry
+
+After choosing a dictionary, the selection should persist rather
+than going back to `default'
+
+Need an option to send the results to a memo
+
+Requested: an option to run the same query against a different dictionary
+(can be done already but they want a shortcut from the Word form to
+pop up the dict list and then run the query).
+
+Regular expression support
+
+Simplified variable input
+
+

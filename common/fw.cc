@@ -1,92 +1,43 @@
 #include "mypilot.h"
 
 #include "fw.h"
-#ifdef __GNUC__
-#include "Callbacks.h"
-#endif
 
-void strncpy(char *dst, const char *src, unsigned n)
-{
-    while (n-- > 0 && (*dst++ = *src++) != 0)
-        (void)0;
-}
-
-void memset(char *dst, const char v, unsigned n)
-{
-    while (n-- > 0)
-        *dst++ = v;
-}
-
-void memcpy(char *dst, const char *src, unsigned n)
-{
-    while (n-- > 0)
-        *dst++ = *src++;
-}
-
-int strcmp(char *s1, char *s2)
-{
-    while (*s1 && *s1 == *s2)
-    {
-        ++s1;
-	++s2;
-    }
-    return (*s1-*s2);
-}
-
-int strncmp(const char *s1, const char *s2, unsigned n)
-{
-    while (n > 0 && *s1 && *s1 == *s2)
-    {
-        ++s1;
-	++s2;
-	--n;
-    }
-    return (n==0) ? 0 : (*s1-*s2);
-}
-
-void HMemCopy(char *buf, VoidHand h, UInt maxlen)
-{
-    buf[0] = 0;
-    if (h)
-    {
-	char *s = (char *)MemHandleLock(h);
-	if (s)
-	{
-	    strncpy(buf, s, maxlen-1);
-	    buf[maxlen-1] = 0;
-	}
-	MemHandleUnlock(h);
-    }
-}
-
-//Application *Application::instance = 0; // assignment will crash
 Application *Application::instance;
 
-#ifdef __GNUC__
-extern "C" void _exit(int) {} // get around linker error
-#endif
+#ifdef USE_DATABASES
 
-Boolean Database::OnOpen()
+Database::Database()
+    : db(0),
+      type(0),
+      mode(0),
+      creator(0),
+      card(0),
+      id(0),
+      numrecords(-1)
 {
-    return True;
+    dbname[0]=0;
 }
 
-Boolean Database::Init(DmOpenRef db_in)
+Boolean Database::Init()
 {
-    strcpy(dbname, "Default");
-    if (db_in)
+    dbname[0] = 0;
+    if (db)
     {
-        db = db_in;
-        numrecords = (int)::DmNumRecords(db);
+        numrecords = (int)DmNumRecords(db);
 	if (DmOpenDatabaseInfo(db, &id, 0, 0, &card, 0) == 0)
-	    if (DmDatabaseInfo(card, id, dbname,0,0,0,0,0,0,0,0,0,0) != 0)
+	{
+	    if (DmDatabaseInfo(card, id, dbname,0,0,0,0,0,0,0,0,&type,&creator) != 0)
 		strcpy(dbname, "Default");
-	        //dbname[0] = 0;
-	return OnOpen();
+	}
+	else
+	{
+	    card = 0;
+	    id = 0;
+	}
+	return True;
     }
     else
     {
-        db = 0;
         numrecords = -1;
 	card = 0;
 	id = 0;
@@ -94,48 +45,108 @@ Boolean Database::Init(DmOpenRef db_in)
     }
 }
 
-Boolean Database::Open(ULong type, UInt mode, ULong creator)
+Boolean Database::Open(UInt32 type_in, LocalID i, UInt16 c, UInt16 mode_in, Char* name_in,
+				UInt16 appinfosize_in, UInt32 creator_in)
 {
     if (!Application::HideSecretRecords())
-        mode |= dmModeShowSecret;
-    return Init(::DmOpenDatabaseByTypeCreator(type, creator, mode));
-}
-    
-Boolean Database::Open(UInt c, LocalID i, UInt mode)
-{
-    if (!Application::HideSecretRecords())
-        mode |= dmModeShowSecret;
-    return Init(::DmOpenDatabase(c, i, mode));
-}
-
-Boolean Database::Create(CharPtr name, ULong type, 
-					UInt mode, ULong creator)
-{
-    if (!::DmCreateDatabase(0, name, creator, type, false))
-        db = 0;
+        mode_in |= dmModeShowSecret;
+    if (name_in == 0) appinfosize_in = 0;
+    mode = mode_in;
+  retry:
+    if (c == 0 && i == 0)
+        db = DmOpenDatabaseByTypeCreator(type_in, creator_in, mode);
     else
-    	(void)Open(type, mode, creator);
-    return (db ? True : False);
+        db = DmOpenDatabase(c, i, mode);
+    if (db == 0 && name_in)
+    {
+        if (DmCreateDatabase(0, name_in, creator_in, type_in, False) == 0)
+        {
+            name_in = 0; // to prevent another retry
+            goto retry;
+        }
+        else ErrNonFatalDisplay("Could not create database");
+    }
+    Boolean rtn = Init();
+    if (rtn && name_in == 0 && appinfosize_in > 0) // newly created, must make appinfoblock
+    {
+        MemHandle h = DmNewHandle(db, appinfosize_in);
+        if (h)
+        {
+            LocalID aibID = MemHandleToLocalID(h);
+            DmSetDatabaseInfo(card, id, 0, 0, 0, 0, 0, 0, 0, &aibID, 0, 0, 0);
+            // initialise it to zero bytes
+            MemPtr p = MemHandleLock(h);
+            DmSet(p, 0, appinfosize_in, 0);
+            MemPtrUnlock(p);
+        }
+    }
+    return rtn;
 }
 
 
-Boolean Database::OpenOrCreate(CharPtr name, ULong type, 
-						UInt mode, ULong creator)
+// Copy data into a record's memory
+
+void Database::Write(void *destptr, const void *srcptr, UInt32 size, UInt32 offset) const
 {
-    Open(type, mode, creator);
-    if (!db) Create(name, type, mode, creator);
-    return (db ? True : False);
+    DmWrite(destptr, offset, srcptr, size); 
 }
 
-DWord Database::Close()
+Boolean Database::CanDeleteRecord(UInt16 recnum) const
+{
+    // XXX we rely on dmModeReadWrite having the same bit set as used 
+    // for dmModeWrite
+    return (db && InRange(recnum) && (mode&dmModeWrite) != 0) ?  True : False;
+}
+ 
+Boolean Database::DeleteRecord(UInt16 recnum) const
+{
+    // note that this deletes the data but not the header, which simply
+    // gets flagged as deleted. For this reason we don't decrement
+    // numrecords. It is advisable to sort the database after deletions,
+    // which will move the deleted blocks to the end, and then recompute
+    // numrecords based on the number of records that are not deleted.
+    return (CanDeleteRecord(recnum) && DmDeleteRecord(db, recnum) == 0) ? True : False;
+}
+
+Boolean Database::PurgeRecord(UInt16 recnum)
+{
+    if (CanDeleteRecord(recnum))
+    {
+        if (DmRemoveRecord(db, recnum) == 0)
+        {
+            --numrecords;
+            return True;
+        }
+        else ErrNonFatalDisplay("Failed to delete record");
+    }
+    return False;
+}
+
+UInt32 Database::Close(Boolean forget_all)
 {
     if (db)
     {
-        DWord error = ::DmCloseDatabase(db);
-	if (error==0) db = 0;
-	return error;
+        UInt32 error = ::DmCloseDatabase(db);
+	if (error) return error;
+	db = 0;
     }
     numrecords = -1;
+    if (forget_all)
+    {
+        card = 0;
+        id = 0;
+        dbname[0] = 0;
+    }
+    return 0;
+}
+
+MemPtr Database::GetAppInfoPtr()
+{
+    if (db) 
+    {
+        LocalID aibID = DmGetAppInfoID(db);
+        return MemLocalIDToLockedPtr(aibID, card);
+    }
     return 0;
 }
 
@@ -144,89 +155,107 @@ Database::~Database()
     if (db) Close();
 }
 
+#endif USE_DATABASES
+
 //-----------------------------------------------------------------
 
-List::List(Form *owner_in, UInt id_in)
-   : id(id_in), lst(0), owner(owner_in)
-{ 
-}
+#ifdef USE_WIDGETS
 
-void List::DrawItem(UInt idx, RectanglePtr bounds)
+Widget::Widget(Form *owner_in, formObjects type_in, UInt16 resid_in)
+   : type(type_in),
+     resid(resid_in)
 {
-    char *item = GetItem(idx);
-    if (item) 
-    	WinDrawChars(item, StrLen(item), bounds->topLeft.x, bounds->topLeft.y);
+    owner_in->AddWidget(this);
 }
 
-void List::Init()
+Widget::~Widget()
 {
 }
 
-Boolean List::Activate() // owner must be active
+#endif USE_WIDGETS
+
+//-----------------------------------------------------------------
+
+#ifdef USE_LISTS
+
+ListSource::~ListSource()
 {
-    lst = (ListPtr)owner->GetObject(id);
-    if (lst)
+}
+
+#ifdef USE_FIXED_LIST_SOURCES
+
+UInt16 FixedListSource::NumItems()
+{
+    return numitems;
+}
+
+Boolean FixedListSource::GetItem(Int16 itemnum, Char* buf, UInt16 buflen, Char **drawtxt)
+{
+    // XXX this must be tested
+    if (buf)
     {
-	LstSetListChoices(lst, (char**)0, (UInt)NumItems());
-	InstallDrawHandler();
-	return True;
+        buf[0] = 0;
+        if (drawtxt && drawtxt[itemnum])
+        {
+            StrNCopy(buf, drawtxt[itemnum], buflen-1);
+            buf[buflen-1] = 0;
+            return True;
+        }
     }
     return False;
 }
 
-void List::Erase()
-{
-    if (lst) LstEraseList(lst);
-}
-
-Boolean List::HandleSelect(UInt selection)
-{
-    (void)selection;
-    return False;
-}
-
-char *List::GetItem(UInt idx)
-{
-    (void)idx;
-    return 0;
-}
-
-int List::NumItems()
-{
-    return 0;
-}
-
-List::~List()
+FixedListSource::~FixedListSource()
 {
 }
 
-//-----------------------------------------------------------------
+#endif USE_FIXED_LIST_SOURCES
 
-DatabaseList::DatabaseList(class Form *owner_in, 
-			   ULong creator_in, 
-			   ULong type_in,
-			   char *name_out_in,
-			   Database *db_in,
-			   UInt listid_in)
-    : List(owner_in, listid_in),
+//-----------------------------------------------------------------------
+
+#ifdef USE_DATABASE_LIST_SOURCES
+
+DatabaseListSource::DatabaseListSource(UInt32 creator_in, UInt32 type_in)
+  : ListSource(),
     creator(creator_in),
     type(type_in),
     dbnames(0),
     cards(0),
     ids(0),
-    numdbs(0),
-    name_out(name_out_in),
-    db(db_in)
+    numdbs(0)
+{
+    InitChoices();
+}
+
+UInt16 DatabaseListSource::NumItems()
+{
+    return numdbs;
+}
+
+void DatabaseListSource::FreeChoices()
+{
+    for (UInt16 i = 0; i < numdbs; i++)
+        delete [] dbnames[i];
+    delete [] dbnames;
+    dbnames = 0;
+    delete [] cards;
+    cards = 0;
+    delete [] ids;
+    ids = 0;
+    numdbs = 0;
+}
+
+void DatabaseListSource::InitChoices()
 {
     Err x;
-    UInt card;
+    UInt16 card;
     LocalID id;
     Boolean newsearch = True;
     DmSearchStateType state;
     int cnt = 0;
-//    Reset();
+    FreeChoices();
     while ((x = DmGetNextDatabaseByTypeCreator(newsearch, &state, type,
-    						creator, True, &card, &id))==0)
+    						creator, False, &card, &id))==0)
     {
         newsearch = False;
 	cnt++;
@@ -234,11 +263,11 @@ DatabaseList::DatabaseList(class Form *owner_in,
     if (cnt)
     {
         dbnames = new char*[cnt];
-        cards = new UInt[cnt];
+        cards = new UInt16[cnt];
         ids = new LocalID[cnt];
         newsearch = True;
         while ((x = DmGetNextDatabaseByTypeCreator(newsearch, &state,
-    					type, creator, True,
+    					type, creator, False,
 					&card, &id)) == 0)
         {
             char name[32];
@@ -250,109 +279,281 @@ DatabaseList::DatabaseList(class Form *owner_in,
 	        {
 	            cards[numdbs] = card;
 	            ids[numdbs] = id;
-	            strcpy(dbnames[numdbs++], name);
+	            StrCopy(dbnames[numdbs++], name);
 	        }
 	    }
         }
     }
 }
 
-int DatabaseList::NumItems()
+Boolean DatabaseListSource::GetItem(Int16 itemNum, Char* buf, UInt16 buflen, Char **data)
 {
-    return numdbs;
+    (void)data;
+    StrNCopy(buf, Name(itemNum), (Int16)buflen-1);
+    buf[buflen-1] = 0;
+    return HasItem(itemNum) ? True : False;
 }
 
-char *DatabaseList::GetItem(UInt idx)
+Boolean DatabaseListSource::Delete(Int16 idx)
 {
-    return (idx>=0 && idx<numdbs) ? dbnames[idx] : "";
-}
-
-void DatabaseList::Init()
-{
-    List::Init();
-}
-
-void DatabaseList::Reset()
-{
-    if (db && db->NumRecords()>=0)
-        db->Close();
-    for (int i = 0; i < numdbs; i++)
-        delete [] dbnames[i];
-    delete [] dbnames;
-    dbnames = 0;
-    delete [] cards;
-    cards = 0;
-    delete [] ids;
-    ids = 0;
-    numdbs = 0;
-}
-
-void DatabaseList::GetName(UInt selection, char *namebuf)
-{
-    strcpy(namebuf, dbnames[selection]);
-}
-
-Boolean DatabaseList::Activate()
-{
-    return List::Activate();
-}
-
-Boolean DatabaseList::HandleSelect(UInt selection)
-{
-    if (name_out) strcpy(name_out, dbnames[selection]);
-    if (db)
+    if (HasItem(idx))
     {
-        db->Close();
-        db->Open(cards[selection], ids[selection], dmModeReadOnly);
+        DmDeleteDatabase(cards[idx], ids[idx]);
+	--numdbs;
+	delete [] dbnames[idx];
+	for (Int16 i = idx; i < (Int16)numdbs; i++)
+	{
+	    dbnames[i] = dbnames[i+1];
+	    cards[i] = cards[i+1];
+	    ids[i] = ids[i+1];
+	}
+	return True;
     }
-    return List::HandleSelect(selection);
+    return False;
 }
 
-DatabaseList::~DatabaseList()
+DatabaseListSource::~DatabaseListSource()
 {
-    Reset();
+    FreeChoices();
 }
+
+#endif USE_DATABASE_LIST_SOURCES
+
+//-----------------------------------------------------------------------------
+
+#ifdef USE_RECORD_LIST_SOURCES
+
+RecordListSource::RecordListSource(Database *db_in)
+    : ListSource(), db(db_in)
+{
+}
+
+UInt16 RecordListSource::NumItems()
+{
+    return db ? db->NumRecords() : (UInt16)0;
+}
+
+Boolean RecordListSource::GetItem(Int16 itemNum, Char* buf, UInt16 buflen, Char **data)
+{
+    (void)data;
+    MemHandle h = db ? db->QueryRecord((UInt16)itemNum) : 0;
+    if (h)
+    {
+        MemPtr p = MemHandleLock(h);
+        if (p)
+        {
+            Format(buf, buflen, p);
+            MemHandleUnlock(h);
+            return True;
+        }
+    }
+    buf[0] = 0;
+    return False;
+}
+
+RecordListSource::~RecordListSource()
+{
+}
+
+#endif USE_RECORD_LIST_SOURCES
+  
+//--------------------------------------------------------------------------
+    
+List::List(Form *owner_in, UInt16 id_in, ListSource *source_in)
+   : Widget(owner_in, frmListObj, id_in),
+     lst(0),
+     source(source_in),
+     select(noListSelection)
+{
+}
+
+Boolean List::Activate()
+{
+    Form *af = Application::Instance()->GetForm();
+    lst = af ? ((ListPtr)af->GetTypedObject(resid, frmListObj)) : 0;
+    if (lst)
+    {
+    	// XXX the PalmOS SDK docs claim the third param is a UInt16
+    	// but the header files declare it as an Int16
+	LstSetListChoices(lst, (char**)0, (Int16)NumItems());
+	InstallDrawHandler();
+	return True;
+    }
+    return False;
+}
+
+Boolean List::HandleSelect(Int16 selection)
+{
+    select = selection;
+    return False;
+}
+
+UInt16 List::NumItems()
+{
+    return (LISTGUARD && source) ? source->NumItems() : 0;
+}
+
+void List::Select(Int16 itemnum)
+{
+    if (LISTGUARD && itemnum>= 0 && itemnum < (Int16)NumItems())
+    {
+        LstSetSelection(lst, select = itemnum);
+        LstMakeItemVisible(lst, itemnum);
+    }
+}
+
+void List::DrawItem(Int16 idx, RectanglePtr bounds, Char **data) const
+{
+    // must be careful - this could blow the stack if very little 
+    // memory is left!
+    char item[32];
+    if (source && source->GetItem(idx, item, sizeof(item), data))
+   	WinDrawChars(item, StrLen(item), bounds->topLeft.x, bounds->topLeft.y);
+}
+
+
+List::~List()
+{
+}
+
+#endif USE_LISTS
 
 //-----------------------------------------------------------------
 
-Form::Form(UInt id_in)
-    : id(id_in), frm(0)
-{ 
+#ifdef USE_FIELDS
+
+Field::Field(Form *owner_in, UInt16 resid_in)
+    : Widget(owner_in, frmFieldObj, resid_in),
+      fld(0)
+{
 }
 
-void Form::PostHandle(EventType &event)
+Boolean Field::Activate()
 {
-    (void)event;
+    Form *owner = Application::Instance()->GetForm();
+    fld = owner ? owner->GetFieldPtr(resid) : 0;
+    return fld ? True : False;
 }
 
-void Form::Init()
+void Field::Read(Char* buf, UInt16 maxlen, UInt16 *offset) const
 {
-    frm = ::FrmInitForm(id);
-}
-
-void Form::ShowProgress(int p)
-{
-    (void)p;
-}
-
-Boolean Form::IsActive() const
-{
-    return Application::IsActive(this);
-}
-
-VoidPtr Form::GetObject(UInt resid)
-{
-    if (frm && IsActive())
+    buf[0] = 0;
+    if (FIELDGUARD)
     {
-        UInt oi = FrmGetObjectIndex(frm, resid);
+        if (offset) *offset = FldGetInsPtPosition(fld);
+        Char* p = FldGetTextPtr(fld);
+        if (p)
+        {
+            StrNCopy(buf, p, (Int16)(maxlen-1));
+            buf[maxlen-1] = 0;
+        }
+    }
+}
+
+void Field::SetOffset(UInt16 offset) const
+{
+    if (FIELDGUARD)
+    {
+	if (offset<=Length())
+	    FldSetInsPtPosition(fld, (UInt16)offset);
+    }
+    else ErrNonFatalDisplay("SetField: no such field");
+}
+
+void Field::Set(const char *txt, UInt16 offset) const
+{
+    if (FIELDGUARD)
+    {
+        FldDelete(fld, 0, FldGetTextLength(fld));
+        if (txt)
+        {
+            UInt16 l = (UInt16)StrLen(txt);
+            FldInsert(fld, (Char*)txt, l);
+	    if (offset<=l)
+	        FldSetInsPtPosition(fld, offset);
+	}
+    }
+    else ErrNonFatalDisplay("SetField: no such field");
+}
+
+Field::~Field()
+{}
+
+#endif USE_FIELDS
+
+//-----------------------------------------------------------------
+
+Form::Form(UInt16 id_in, UInt16 numwidgets_in)
+    : id(id_in), frm(0)
+#ifdef USE_WIDGETS
+    , widgets(0), numwidgets(numwidgets_in)
+#endif USE_WIDGETS
+{
+    Application::Instance()->AddForm(this);
+#ifdef USE_WIDGETS
+    if (numwidgets)
+    {
+        widgets = new Widget*[numwidgets];
+        if (widgets)
+        {
+            for (UInt16 i = 0; i < numwidgets; i++)
+                widgets[i] = 0;
+        }
+        else ErrFatalDisplay("Could not allocate widget table");
+    }
+#else
+    (void)numwidgets_in;
+#endif
+}
+
+UInt16 Form::GetObjectIndex(UInt16 resid) const
+{
+    return frm ? FrmGetObjectIndex(frm, resid) : noFocus;
+}
+
+MemPtr Form::GetObject(UInt16 resid) const
+{
+    UInt16 oi = GetObjectIndex(resid);
+    if (oi == noFocus)
+    {
+        ErrNonFatalDisplay("GetObject: A form object with the specified resource ID does not exist");
+        return 0;
+    }
+    return FrmGetObjectPtr(frm, oi);
+}
+
+void Form::SetFocus(UInt16 resid) const
+{
+    if (FORMGUARD)
+        FrmSetFocus(frm, FrmGetObjectIndex(frm, resid));
+}
+
+MemPtr Form::GetTypedObject(UInt16 resid, FormObjectKind type) const
+{
+    if (FORMGUARD)
+    {
+        UInt16 oi = GetObjectIndex(resid);
+        if (oi == noFocus || FrmGetObjectType(frm, oi) != type)
+        {
+            ErrNonFatalDisplay("GetTypedObject: A form object is not of the expected type");
+            return 0;
+        }
         return FrmGetObjectPtr(frm, oi);
     }
     else return 0;
 }
-
-void Form::DrawControl(UInt resid)
+    
+ControlPtr Form::GetTypedControl(UInt16 resid, ControlStyleType type) const
 {
-    ControlPtr b = (ControlPtr)GetObject(resid);
+    ControlPtr rtn = GetControl(resid);
+    if (rtn && rtn->style == type) return rtn;
+    ErrNonFatalDisplay("GetTypedControl: A form object is not of the expected control type");
+    return 0;
+}
+
+void Form::DrawControl(UInt16 resid) const
+{
+    ControlPtr b = GetControl(resid);
     if (b)
     {
         CtlSetUsable(b, 1);
@@ -360,181 +561,254 @@ void Form::DrawControl(UInt resid)
     }
 }
 
-void Form::EnableControl(UInt resid, int v)
+void Form::EnableControl(UInt16 resid, int v) const
 {
-    ControlPtr b = (ControlPtr)GetObject(resid);
+    ControlPtr b = GetControl(resid);
     if (b) CtlSetEnabled(b, (unsigned char)v);
 }
 
-void Form::DisableControl(UInt resid)
+void Form::DisableControl(UInt16 resid) const
 {
-    ControlPtr b = (ControlPtr)GetObject(resid);
+    ControlPtr b = GetControl(resid);
     if (b) CtlSetEnabled(b, 0);
 }
 
-void Form::HideControl(UInt resid)
+void Form::HideControl(UInt16 resid) const
 {
-    ControlPtr b = (ControlPtr)GetObject(resid);
+    ControlPtr b = GetControl(resid);
     if (b) CtlHideControl(b);
 }
 
-void Form::ShowControl(UInt resid)
+void Form::ShowControl(UInt16 resid) const
 {
-    ControlPtr b = (ControlPtr)GetObject(resid);
+    ControlPtr b = GetControl(resid);
     if (b) CtlShowControl(b);
 }
 
-void Form::SetControlLabel(UInt resid, const char *lbl)
+void Form::SetControlLabel(UInt16 resid, const char *lbl) const
 {
-    ControlPtr sel = (ControlPtr)GetObject(resid);
-    if (sel) CtlSetLabel(sel, (char*)lbl);
+    ControlPtr sel = GetControl(resid);
+    if (sel) CtlSetLabel(sel, (Char*)lbl);
 }
 
-void Form::ClearField(UInt resid)
-{
-    FieldPtr fld = (FieldPtr)GetObject(resid);
-    if (fld) FldDelete(fld, 0, FldGetTextLength(fld));
-}
+// XXX be very careful with the next routine: never set the label text to be something
+// longer than the one used at compile time, or an overrun will occur and cause 
+// corruption!
 
-CharPtr Form::ReadField(UInt resid)
+void Form::SetLabelText(UInt16 resid, const Char* lbl) const
 {
-    FieldPtr fld = (FieldPtr)GetObject(resid);
-    return fld ? FldGetTextPtr(fld) : 0;
-}
-
-void Form::InsertInField(UInt resid, char c)
-{
-    FieldPtr fld = (FieldPtr)GetObject(resid);
-    if (fld) FldInsert(fld, &c, 1);
-}
-
-void Form::SetField(UInt resid, const char *txt)
-{
-    FieldPtr fld = (FieldPtr)GetObject(resid);
-    if (fld)
+    UInt16 oi = GetObjectIndex(resid);
+    if (oi != noFocus)
     {
-        FldDelete(fld, 0, FldGetTextLength(fld));
-        FldInsert(fld, (char*)txt, strlen(txt));
+        FrmHideObject(frm, oi);
+        FrmCopyLabel(frm, resid, lbl);
+        FrmShowObject(frm, oi);
     }
+    else ErrNonFatalDisplay("SetLabelText: No label with the given resource ID");
 }
 
-void Form::SetCheckBox(UInt resid, UInt val)
+#ifdef USE_FIELDS
+
+Field *Form::GetFieldWithFocus() const
 {
-    ControlPtr cm = (ControlPtr)GetObject(resid);
-    if (cm) CtlSetValue(cm, (Short)val);
+    UInt16 focus = FORMGUARD ? FrmGetFocus(frm) : noFocus;
+    return (focus == noFocus) ? 0 : GetField(FrmGetObjectId(frm, focus));
 }
 
-UInt Form::IsCheckBoxSet(UInt resid)
+#endif USE_FIELDS
+
+FieldPtr Form::GetFieldPtrWithFocus() const
 {
-    ControlPtr cm = (ControlPtr)GetObject(resid);
-    return (UInt)((cm && CtlGetValue(cm)) ? 1 : 0);
+    UInt16 focus = FORMGUARD ? FrmGetFocus(frm) : 0;
+    if (focus == noFocus || FrmGetObjectType(frm, focus) != frmFieldObj)
+        return 0;
+    else
+        return (FieldPtr)FrmGetObjectPtr(frm, focus);
 }
 
-void Form::DrawRectangle(int left, int top, int width, int height)
+void Form::SetCheckBox(UInt16 resid, UInt16 val) const
 {
-    WinHandle h = WinGetDrawWindow();
-    WinSetDrawWindow(WinGetDisplayWindow());
-    RectangleType r;
-    r.topLeft.x = left;
-    r.topLeft.y = top;
-    r.extent.x = width;
-    r.extent.y = height;
-    WinDrawRectangle(&r, 0);
-    WinSetDrawWindow(h);
+    ControlPtr cm = GetTypedControl(resid, checkboxCtl);
+    if (cm) CtlSetValue(cm, (Int16)val);
 }
 
-void Form::ClearRectangle(int left, int top, int width, int height)
+UInt16 Form::IsCheckBoxSet(UInt16 resid) const
 {
-    WinHandle h = WinGetDrawWindow();
-    WinSetDrawWindow(WinGetDisplayWindow());
-    RectangleType r;
-    r.topLeft.x = left;
-    r.topLeft.y = top;
-    r.extent.x = width;
-    r.extent.y = height;
-    WinEraseRectangle(&r, 0);
-    WinSetDrawWindow(h);
+    ControlPtr cm = GetTypedControl(resid, checkboxCtl);
+    return (UInt16)((cm && CtlGetValue(cm)) ? 1 : 0);
 }
 
-Boolean Form::Activate()
-{
-    if (frm)
-    {
-	Application::Instance()->SetActiveForm(this);
-        ::FrmSetActiveForm(frm);
-        ::FrmSetEventHandler(frm, Form::EventHandler);
-        return True;
-    }
-    return False;
-}
-
-Form *Form::Switch(UInt resid) // activate a different form
-{
-    Form *f = Application::Instance()->GetForm(resid);
-    if (f) f->PostLoadEvent();
-    return f;
-}
+//------------------------------------------------------------------------
+// Event Handling
 
 Boolean Form::EventHandler(EventPtr event) // static
 {
-#ifdef __GNUC__
-    CALLBACK_PROLOGUE
-#endif
     Boolean handled = False;
     Form *form = Application::Instance()->GetForm();
     if (form) switch (event->eType)
     {
+    
+        // Events affecting the active form
+        
+    case frmOpenEvent:
+        // app must initialise and draw form.
+        // form ID is in event->data.frmOpen.formID
+	handled = form->HandleOpen();
+	break;
+#if 0
+    case frmGotoEvent:
+        // not required yet
+        break;
+    case frmLoadEvent:
+        // what should we do here, if anything?
+        // the formID is in event->data.frmLoad.formID
+        break;
+    case frmSaveEvent:
+        // not required yet. No data is passed.
+        break;
+#endif
+    case frmCloseEvent:
+        // app must close and free up form.
+        // form ID is in event->data.frmOpen.formID
+        // if we don't handle it, then the FormObject will be 
+        // delete by PalmOS, but not our Form object, so we need
+        // to use care here!
+	form->HandleClose();
+    	break;
+    case frmUpdateEvent:
+        // redraw the form. The event data contains the form
+        // ID and the update reason code
+	handled = form->HandleUpdate();
+	break;
+#if 0
+    case frmTitleSelectEvent:
+        // not required yet
+        break;
+	
+	// Events affecting controls. Typically we would only want to
+	// bother with ctlSelectEvent. ctlRepeatEvent is useful for
+	// handling repeating buttons. ctlEnterEvent is usually only
+	// of interest if we want to dynically update a control when
+	// it is tapped (e.g. filling in the contents of a popup list),
+	// in which case we may also want to handle ctlExitEvent if we
+	// need to free any resources that were allocated by the handler
+	// for ctlEnterEvent. Note that a control that gets a ctlEnterEvent
+	// will get either a ctlSelectEvent or a ctlExitEvent, but 
+	// not both (ctlExitEvent means the stylus moved out of the
+	// control before it was lifted).
+
+    case ctlEnterEvent: // data has control ID and ControlPtr
+    case ctlExitEvent:
+    case ctlRepeatEvent: // data also has timer ticks
+        // not required yet
+        break;
+#endif
+
     case ctlSelectEvent:
 	handled = form->HandleSelect(event->data.ctlSelect.controlID);
 	break;
-    case sclRepeatEvent:
-	handled = form->HandleScroll(event->data.sclRepeat.scrollBarID,
-					event->data.sclRepeat.value,
-					event->data.sclRepeat.newValue);
+
+#if 0	
+    case daySelectEvent:
+        // not required yet
+        break;
+    
+    case fldChangedEvent:
+    case fldEnterEvent:
+    case fldHeightChangedEvent:
+        // not required yet
+        break;
+#endif
+        
+    case keyDownEvent:
+        handled = form->HandleKeyDown(event->data.keyDown.chr, 
+        			      event->data.keyDown.keyCode,
+        			      event->data.keyDown.modifiers);
+        break;
+
+	// Events affecting lists. As for controls, we are usually
+	// only interested in handling the lstSelectEvent.
+#if 0	
+    case lstEnterEvent:
+    case lstExitEvent:
+        // not required yet
+        break;            
+#endif
+
+    case lstSelectEvent:
+#ifdef USE_LISTS
+	(void)form->HandleListSelect(event->data.lstSelect.listID,
+	      			     event->data.lstSelect.selection);
+#endif
+	handled = False; // important; PalmOS may need to do more!
 	break;
-    case frmOpenEvent:
-	handled = form->Open();
-	break;
-//    case frmCloseEvent:
-    case frmUpdateEvent:
-	handled = form->Update();
-	break;
+	
     case menuEvent:
 	handled = form->HandleMenu(event->data.menu.itemID);
 	break;
+
+#if 0
+    case nilEvent: // timeout event
+        // not required yet
+        break;
+
+    case penDownEvent:
+    case penMoveEvent:
+    case penUpEvent:
+        // not required yet
+        break;
+#endif
+                
     case popSelectEvent:
 	handled = form->HandlePopupListSelect(event->data.popSelect.controlID,
-						event->data.popSelect.listID,
-						event->data.popSelect.selection);
+					      event->data.popSelect.listID,
+					      event->data.popSelect.selection);
 	break;
-    case lstSelectEvent:
-	(void)form->HandleListSelect(event->data.lstSelect.listID,
-	      				event->data.lstSelect.selection);
-	handled = False; // important!
-	break;
-    case keyDownEvent:
-        handled = form->HandleKeyDown(event->data.keyDown.chr, 
-        				event->data.keyDown.keyCode,
-        				event->data.keyDown.modifiers);
+
+#if 0
+    case sclEnterEvent:
+    case sclExitEvent:
+        // not required yet
         break;
-    default:
-        handled = False;
-    }
-#ifdef __GNUC__
-    CALLBACK_EPILOGUE
 #endif
+
+    case sclRepeatEvent:
+	handled = form->HandleScroll(event->data.sclRepeat.scrollBarID,
+				     event->data.sclRepeat.value,
+				     event->data.sclRepeat.newValue);
+	break;
+	
+#if 0
+	// Events affecting tables; like controls and lists we typically
+	// care only about the tblSelectEvent.
+	
+    case tblEnterEvent:
+    case tblExitEvent:
+    case tblSelectEvent:
+        // not required yet
+        break;
+        
+    case winEnterEvent:
+    case winExitEvent:
+        // not required yet
+        break;
+#endif
+        
+    default:
+        break;
+    }
     return handled;
 }
 
-Boolean Form::HandleSelect(UInt objID)
+Boolean Form::HandleSelect(UInt16 objID)
 {
     (void)objID;
     return False;
 }
 
-Boolean Form::HandlePopupListSelect(UInt triggerID,
-					UInt listID,
-					UInt selection)
+Boolean Form::HandlePopupListSelect(UInt16 triggerID,
+					UInt16 listID,
+					Int16 selection)
 {
     (void)triggerID;
     (void)listID;
@@ -542,14 +816,17 @@ Boolean Form::HandlePopupListSelect(UInt triggerID,
     return False;
 }
 
-Boolean Form::HandleListSelect(UInt listID, UInt selection)
+#ifdef USE_LISTS
+
+Boolean Form::HandleListSelect(UInt16 listID, Int16 selection)
 {
-    (void)listID;
-    (void)selection;
-    return False;
+    List *l = GetList(listID);
+    return l ? l->HandleSelect(selection) : False;
 }
 
-Boolean Form::HandleScroll(UInt objID, Short oldv, Short newv)
+#endif USE_LISTS
+
+Boolean Form::HandleScroll(UInt16 objID, Int16 oldv, Int16 newv)
 {
     (void)objID;
     (void)oldv;
@@ -557,7 +834,7 @@ Boolean Form::HandleScroll(UInt objID, Short oldv, Short newv)
     return False;
 }
 
-Boolean Form::HandleKeyDown(UInt chr, UInt keyCode, UInt &modifiers)
+Boolean Form::HandleKeyDown(UInt16 chr, UInt16 keyCode, UInt16 &modifiers)
 {
     (void)chr;
     (void)keyCode;
@@ -565,147 +842,253 @@ Boolean Form::HandleKeyDown(UInt chr, UInt keyCode, UInt &modifiers)
     return False;
 }
 
-Boolean Form::HandleMenu(UInt menuID)
+Boolean Form::HandleMenu(UInt16 menuID)
 {
-    (void)menuID;
+    if (FORMGUARD)
+    {
+#ifdef USE_FIELDS
+        Field *fld = GetFieldWithFocus();
+#endif
+        switch (menuID)
+        {
+#ifdef USE_FIELDS
+#ifdef EditCut
+	case EditCut:
+	    if (fld) fld->CutToClipboard();
+	    return True;
+#endif
+#ifdef EditCopy
+	case EditCopy:
+	    if (fld) fld->CopyToClipboard();
+	    return True;
+#endif
+#ifdef EditPaste
+	case EditPaste:
+	    if (fld) fld->PasteFromClipboard();
+	    return True;
+#endif
+#ifdef EditSelectAll
+	case EditSelectAll:
+	    if (fld) fld->SelectAll();
+	    return True;
+#endif
+#ifdef EditUndo
+	case EditUndo:
+	    if (fld) fld->Undo();
+	    return True;
+#endif
+#endif USE_FIELDS
+#ifdef EditKeyboard
+	case EditKeyboard:
+            SysKeyboardDialog(kbdDefault);
+	    return True;
+#endif
+#ifdef EditGraffiti
+	case EditGraffiti:
+            SysGraffitiReferenceDialog(referenceDefault);
+	    return True;
+#endif
+	default:
+	    break;
+        }
+    }
     return False;
 }
 
-Boolean Form::Open() // NB Dialogs mustn't use this (see PP pg 103)
+Boolean Form::HandleOpen() // NB Dialogs don't get frmOpenEvents and mustn't require this (see PP pg 103)
 {
     Draw();
     return True;
 }
 
-Boolean Form::Update()
+Boolean Form::HandleUpdate()
 {
     return False;
 }
 
-List *Form::GetList(UInt lidx)
+void Form::HandleClose()
 {
-    (void)lidx;
+    //XXX do dialogs get this??
+    frm = 0;
+}
+
+//--------------------------------------------------------------------
+
+Boolean Form::IsActive() const
+{
+    return Application::IsActive(this);
+}
+
+#ifdef USE_WIDGETS
+
+Boolean Form::AddWidget(Widget *w)
+{
+    for (UInt16 i = 0; i < numwidgets; i++)
+    {
+        if (widgets[i] == 0)
+        {
+            widgets[i] = w;
+            return True;
+        }
+    }
+    ErrFatalDisplay("Form::AddWidget: not enough space for widgets");
+    return False;
+}
+
+#endif
+
+Boolean Form::Activate()
+{
+    // allocate and initialise the FormObject data structure.
+    // the form is not drawn and doesn't get sent any events
+    // yet.
+    if (frm == 0)
+        frm = FrmInitForm(id);
+    if (frm)
+    {
+        FrmSetEventHandler(frm, Form::EventHandler);
+        FrmSetActiveForm(frm);
+        Application::SetActiveForm(this);
+        Boolean rtn = True;
+#ifdef USE_WIDGETS
+        for (UInt16 i = 0; i < numwidgets; i++)
+            if (widgets[i] && !widgets[i]->Activate())
+                rtn = False;
+#endif USE_WIDGETS
+        return rtn;
+    }
+    return False;
+}
+
+#ifdef USE_WIDGETS
+
+Widget *Form::GetWidget(UInt16 id) const
+{
+    for (UInt16 i = 0; i < numwidgets; i++)
+        if (widgets[i] && widgets[i]->ID() == id)
+            return widgets[i];
     return 0;
 }
 
-Form::~Form()
+#endif USE_WIDGETS
+
+#ifdef USE_FIELDS
+
+Field *Form::GetField(UInt16 id) const
 {
+    Widget *w = GetWidget(id);
+    if (w && w->Type() == frmFieldObj)
+        return (Field*)w;
+    return 0;
 }
 
-//------------------------------------------------------------
+#endif USE_FIELDS
+
+#ifdef USE_LISTS
+
+List *Form::GetList(UInt16 id) const
+{
+    Widget *l = GetWidget(id);
+    if (l && l->Type() == frmListObj)
+        return (List*)l;
+    return 0;
+}
+
+#endif USE_LISTS
+
+Form::~Form()
+{
+#ifdef USE_WIDGETS
+    delete [] widgets;
+#endif USE_WIDGETS
+}
+
+//-----------------------------------------------------------------------
+
+#ifdef USE_DIALOGS
 
 Boolean Dialog::Activate()
 {
+    caller = Application::Instance()->GetForm();
     return Form::Activate();
 }
 
-void Dialog::Init()
-{
-    Form::Init();
-}
-
-Boolean Dialog::HandleSelect(UInt objID)
+Boolean Dialog::HandleSelect(UInt16 objID)
 {
     return Form::HandleSelect(objID);
 }
 
-Boolean Dialog::HandleScroll(UInt objID, Short oldv, Short newv)
+Boolean Dialog::HandleScroll(UInt16 objID, Int16 oldv, Int16 newv)
 {
     return Form::HandleScroll(objID, oldv, newv);
 }
      
-UInt Dialog::Run()
+UInt16 Dialog::Run()
 {
-    Init();
-    if (Activate())
-	return FrmDoDialog(frm);
-    return 0;
+    return Activate() ? FrmDoDialog(frm) : 0;
 }
 
 Dialog::~Dialog()
 {
-    if (parent) parent->Activate();
-    if (frm) FrmDeleteForm(frm);
+    if (caller)
+	caller->Activate();
+    if (frm)
+	FrmDeleteForm(frm);
 }
+
+#endif USE_DIALOGS
 
 //------------------------------------------------------------
 
-void RadioGroupDialog::Init()
+Application::Application(UInt16 numforms_in, UInt16 startformID_in)
+    : forms(0), numforms(numforms_in), activeform(0), startformID(startformID_in)
 {
-    Dialog::Init();
+    if (instance) ErrNonFatalDisplay("Multiple application instances!");
+    instance = this;
+    forms = new Form*[numforms];
+    if (forms)
+    {
+        for (UInt16 i = 0; i < numforms; i++)
+            forms[i] = 0;
+    }
 }
 
-Boolean RadioGroupDialog::Activate()
+Boolean Application::AddForm(Form *f)
 {
-    if (Dialog::Activate())
+    for (UInt16 i = 0; i < numforms; i++)
     {
-        if (title) FrmSetTitle(frm, title);
-        for (UInt i = 0; i < numcbs; i++)
+        if (forms[i] == 0)
         {
-            ControlPtr s = (ControlPtr)GetObject(firstcb+i);
-            if (s) CtlSetValue(s, (Short)((i==val)?1:0));
+            forms[i] = f;
+            return True;
         }
-	return True;
     }
     return False;
 }
 
-Boolean RadioGroupDialog::HandleSelect(UInt objID)
+Boolean Application::OpenDatabases()
 {
-    if (objID >= firstcb && objID < (firstcb+numcbs))
-    {
-        for (UInt i = 0; i < numcbs; i++)
-        {
-            ControlPtr s = (ControlPtr)GetObject(firstcb+i);
-            if (s) CtlSetValue(s, (Short)((i==(objID-firstcb))?1:0));
-        }
-    }
-    return Dialog::HandleSelect(objID);
+    return True;
 }
 
-UInt RadioGroupDialog::Run()
+void Application::CloseDatabases()
 {
-    (void)Dialog::Run();
-    return GetValue();
 }
 
-UInt RadioGroupDialog::GetValue()
+Form *Application::GetForm(UInt16 formID) const
 {
-    for (UInt i = 0; i < numcbs; i++)
+    if (forms == 0) return 0;
+    for (UInt16 i = 0; i < numforms; i++)
     {
-        ControlPtr s = (ControlPtr)GetObject(firstcb+i);
-        if (s && CtlGetValue(s))
-            return i;
+        if (forms[i] && forms[i]->ID() == formID)
+            return forms[i];
     }
     return 0;
 }
 
-
-RadioGroupDialog::~RadioGroupDialog()
+Form *Application::GetForm() const
 {
-}
-
-//------------------------------------------------------------
-
-DWord Application::OpenDatabases()
-{
-    return 0;
-}
-
-DWord Application::CloseDatabases()
-{
-    return 0;
-}
-
-Form *Application::GetForm(UInt formID)
-{
-    (void)formID;
-    return 0;
-}
-
-Form *Application::TopForm()
-{
-    return 0;
+    return activeform;
 }
 
 Application *Application::Instance()
@@ -718,6 +1101,18 @@ void Application::SetActiveForm(Form *f)
     if (instance) instance->activeform = f;
 }
 
+Boolean Application::IsActive(const Form *f)
+{
+    return (instance && (instance->GetForm() == f));
+}
+
+void Application::SetLetterCapsMode(Boolean newcaps)
+{
+    Boolean caps, num, aut;
+    UInt16 temp;
+    GrfGetState(&caps, &num, &temp, &aut);
+    GrfSetState(newcaps, num, False);
+}
 
 Boolean Application::HideSecretRecords()
 {
@@ -727,9 +1122,9 @@ Boolean Application::HideSecretRecords()
         return false;
 }
 
-Err Application::RomVersionCompatible(DWord requiredVersion, Word launchFlags)
+Err Application::RomVersionCompatible(UInt32 requiredVersion, UInt16 launchFlags)
 {
-    DWord romVersion;
+    UInt32 romVersion;
 	
     // See if we're on in minimum required version of the ROM or later.
     // The system records the version number in a feature.  A feature is a
@@ -760,22 +1155,20 @@ Err Application::RomVersionCompatible(DWord requiredVersion, Word launchFlags)
     return 0;
 }
 
-int Application::EventWaitTime()
+int Application::EventWaitTime() const
 {
     return evtWaitForever;
 }
 
-Boolean Application::HandleLoadEvent(UInt formID)
+Boolean Application::HandleLoadEvent(UInt16 formID)
 {
     Form *form = GetForm(formID);
     if (form)
     {
-        form->Init();
         if (form->Activate())
-	{
-	    activeform = form;
-	    return True;
-	}
+            return True;
+        else
+            ErrNonFatalDisplay("Form activation failure");
     }
     return False;
 }
@@ -794,10 +1187,10 @@ Boolean Application::HandleEvent(EventType &event)
     return handled;
 }
 
-DWord Application::Start()
+UInt32 Application::Start()
 {
     ::PrefGetPreferences(&sysPrefs);
-    return OpenDatabases();
+    return OpenDatabases() ? 0 : 1; // should be returning an error code to PilotMain
 }
 
 void Application::EventLoop()
@@ -808,15 +1201,13 @@ void Application::EventLoop()
         ::EvtGetEvent(&event, EventWaitTime());
 	if (!::SysHandleEvent(&event))
 	{
-	    Word error;
+	    UInt16 error;
 	    if (!::MenuHandleEvent(0, &event, &error))
 	    {
 	        if (!HandleEvent(event))
 		    ::FrmDispatchEvent(&event);
 	    }
 	}
-	if (GetForm())
-	    GetForm()->PostHandle(event);
     } while (event.eType != appStopEvent);
 }
 
@@ -826,85 +1217,75 @@ void Application::Stop()
     CloseDatabases();
 }
 
-DWord Application::Main(Word cmd, Ptr cmdPBP, Word launchflags)
+UInt32 Application::Main(MemPtr cmdPBP, UInt16 launchflags)
 {
+    UInt32 error;
     (void)cmdPBP;
     (void)launchflags;
-    DWord error = 0; //RomVersionCompatible (version20, launchflags);
-    if (error) return error;
-
-    switch (cmd)
+    if ((error = Start()) == 0)
     {
-    case sysAppLaunchCmdNormalLaunch:
-        if ((error = Start()) == 0)
+	Form *f = GetForm(startformID);
+	if (f)
 	{
-	    TopForm()->PostLoadEvent();
+	    f->Switch(startformID);
 	    EventLoop();
-	    Stop();
 	}
-	break;
-    case sysAppLaunchCmdFind:
-    case sysAppLaunchCmdGoTo:
-    case sysAppLaunchCmdSyncNotify:
-    case sysAppLaunchCmdTimeChange:
-    case sysAppLaunchCmdSystemReset:
-    case sysAppLaunchCmdAlarmTriggered:
-    case sysAppLaunchCmdDisplayAlarm:
-    case sysAppLaunchCmdCountryChange:
-    case sysAppLaunchCmdSyncRequest:
-    case sysAppLaunchCmdSaveData:
-    case sysAppLaunchCmdInitDatabase:
-        error = 0;
-	break;
-    default:
-        error = sysErrParamErr;
-        break;
+	Stop();
     }
     return error;
 }
 
-Application::Application()
+#ifdef USE_LISTS
+void Application::DrawListItem(UInt16 lidx, Int16 idx, RectanglePtr bounds, Char **data)
 {
-    // assert(instance==0);
-    instance = this;
-}
-
-Boolean Application::IsActive(const Form *f)
-{
-    return (instance && (instance->GetForm() == f));
-}
-
-void Application::DrawListItem(UInt lidx, UInt idx, RectanglePtr bounds)
-{
+    if (idx<0) return;
     Form *f = GetForm();
     if (f)
     {
         List *l = f->GetList(lidx);
-	if (l) l->DrawItem(idx, bounds);
+	if (l) l->DrawItem(idx, bounds, data);
     }
 }
+#endif
 
 Application::~Application()
 {
+    delete [] forms;
 }
 
-void DrawDebugText(int x, int y, const char *txt)
-{
-    WinHandle h = WinGetDrawWindow();
-    WinSetDrawWindow(WinGetDisplayWindow());
-    WinDrawChars(txt, strlen(txt), x, y);
-    WinSetDrawWindow(h);
-}
+extern UInt32 RunApplication(MemPtr cmdPBP, UInt16 launchflags);
 
-DWord PilotMain(Word cmd, Ptr cmdPBP, Word launchflags)
+UInt32 PilotMain(UInt16 cmd, MemPtr cmdPBP, UInt16 launchflags)
 {
-    extern DWord RunApplication(Word cmd, Ptr cmdPBP, Word launchflags);
-    if (cmd == sysAppLaunchCmdNormalLaunch)
-        return RunApplication(cmd, cmdPBP, launchflags);
-    return 0;
+    (void)cmdPBP;
+    (void)launchflags;
+    UInt32 error = Application::RomVersionCompatible (0x02000000, launchflags);
+    if (error == 0) 
+    {
+        switch (cmd)
+        {
+        case sysAppLaunchCmdNormalLaunch:
+            return RunApplication(cmdPBP, launchflags);
+        case sysAppLaunchCmdFind:
+        case sysAppLaunchCmdGoTo:
+        case sysAppLaunchCmdSyncNotify:
+        case sysAppLaunchCmdTimeChange:
+        case sysAppLaunchCmdSystemReset:
+        case sysAppLaunchCmdAlarmTriggered:
+        case sysAppLaunchCmdDisplayAlarm:
+        case sysAppLaunchCmdCountryChange:
+        case sysAppLaunchCmdSyncRequest:
+        case sysAppLaunchCmdSaveData:
+        case sysAppLaunchCmdInitDatabase:
+            error = 0;
+	    break;
+        default:
+            error = sysErrParamErr;
+            break;
+        }
+    }
+    return error;
 }
 
 //------------------------------------------------------------------
 
-
-

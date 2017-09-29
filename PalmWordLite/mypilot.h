@@ -19,25 +19,18 @@
 #    include <string.h>
 #    include <ctype.h>
 
-     typedef unsigned short UInt;
      typedef unsigned short Boolean;
 #    define ltoa(x)	itoa(x)
 #  endif
 
-// App specific
-
-#define WORDFINDPP
+#define WORDFINDLITE
 #define MY_CREATOR_ID		'xWrd'
 
 #define USE_DATABASES
 #define USE_LISTS
-#define USE_DATABASE_LIST_SOURCES
 #define USE_FIELDS
-#define USE_DIALOGS
 
-// res file
-
-#include "ptrsc.h"
+#include "pl_res.h"
 
 #endif
 

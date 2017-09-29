@@ -1,9 +1,20 @@
 // TODO: help
+// WORDFIND TODO:
+//
+// Need to change the characters used for vowels in PalmUInt16
+// to ' and " so that they don't conflict with closures in
+// the regular expressions, and then support them in our
+// RegExp class so that regular expressions with vowel or
+// consonant character ranges are more concise and we need
+// less special handling of the vowel/consonant inserts (and
+// must update the html manual and the on-line help to reflect
+// this change).
+// The WordForm class is essentially identical in both pl.cc 
+// and pt.cc; this should be moved to a common file, together
+// with any other code common to WordFindPro/++ and WordFindLite.
 // Robustness with bad patterns, overruns
-// Add a dict info dialog showing word length distributions 
-//	and total number of words.
 
-#define VARVECT
+#define GLOBAL // just used to mark globals
 
 #include "mypilot.h"
 #ifdef IS_FOR_PALM
@@ -18,34 +29,83 @@
 
 #define CLIENT_DB_TYPE		(0)
 
-#define ConfigDBType		((ULong)'pwcf')
+#define ConfigDBType		((UInt32)'pwcf')
 
 #define NumWordListItems	(11)
 
-#define CFGSZ			(7*sizeof(UInt)+\
-				(NumHistoryItems+1)*MAX_PAT_LEN+\
-				 26*sizeof(char)+\
-				 sizeof(ULong) + sizeof(UInt))
+#define MAX_PAT_LEN	(64)
+
+typedef enum { LOWER, UPPER } LetterCase;
+
+#ifdef USE_REGEXP
+#define NUM_HISTS	2
+#else
+#define NUM_HISTS	1
+#endif
+#ifdef VARVECT
+#define NUM_VARSETS	1
+#else
+#define NUM_VARSETS	0
+#endif
+
+#define CFGSZ			(7*sizeof(UInt16)+\
+				 NUM_HISTS*(sizeof(UInt16)+(NumHistoryItems+1)*MAX_PAT_LEN)+\
+				 NUM_VARSETS*26*sizeof(char)+\
+				 sizeof(UInt16))
 
 // Globals - bad in C++ but we need to avoid stack/heap usage
 
-UInt minlength, maxlength, mincount, maxcount;
-UInt matchtype, multi;
-char pattern[MAX_PAT_LEN];
-enum { LOWER, UPPER } letter_case;
-VariableSet vars;
-History history;
+#ifdef VARVECT
+GLOBAL class VariableSet *vars;
+#endif
+GLOBAL class WordFindDict *dict;
 
-class PalmWordDict : public DictionaryDatabase
+void DrawRectangle(int left, int top, int width, int height)
+{
+    WinHandle h = WinGetDrawWindow();
+    WinSetDrawWindow(WinGetDisplayWindow());
+    RectangleType r;
+    r.topLeft.x = left;
+    r.topLeft.y = top;
+    r.extent.x = width;
+    r.extent.y = height;
+    WinDrawRectangle(&r, 0);
+    WinSetDrawWindow(h);
+}
+
+void ClearRectangle(int left, int top, int width, int height)
+{
+    WinHandle h = WinGetDrawWindow();
+    WinSetDrawWindow(WinGetDisplayWindow());
+    RectangleType r;
+    r.topLeft.x = left;
+    r.topLeft.y = top;
+    r.extent.x = width;
+    r.extent.y = height;
+    WinEraseRectangle(&r, 0);
+    WinSetDrawWindow(h);
+}
+
+void ClearProgress()
+{
+    ClearRectangle(153, 15, 5, 120);
+}
+
+void ShowProgress(int p)
+{
+    DrawRectangle(153, 20, 5, p);
+}
+
+class WordFindDict : public DictionaryDatabase
 {
   protected:
     virtual int MustStop();
   public:
-    PalmWordDict() : DictionaryDatabase() {}
-    virtual ~PalmWordDict() {}
+    WordFindDict() : DictionaryDatabase() {}
+    virtual ~WordFindDict() {}
 };
 
-int PalmWordDict::MustStop()
+int WordFindDict::MustStop()
 {
 #ifdef IS_FOR_PALM
     short x, y;
@@ -57,21 +117,146 @@ int PalmWordDict::MustStop()
 #endif
 }
 
-PalmWordDict dict;
+#if defined(WORDFINDPRO) || defined(WORDFINDPP)
 
-//---------------------------------------------------------
+class DatabaseList : public List
+{
+  protected:
+    DatabaseListSource s;
+    
+    char *name_out;
+    DictionaryDatabase *db;
 
-class PalmWordDictList : public DatabaseList
+    //void Reset();
+  public:
+    DatabaseList(Form *owner_in, UInt32 creator_in, UInt32 type_in,
+    		char *name_out_in = 0, DictionaryDatabase *db_in = 0,
+		UInt16 listid_in = 0);
+    void SetDB(DictionaryDatabase *db_in)
+    {
+        db = db_in;
+    }
+    virtual void InstallDrawHandler() const = 0;
+    virtual Boolean Activate();
+    virtual Boolean HandleSelect(Int16 selection);
+    Boolean Delete()
+    {
+        return s.Delete(select);
+    }
+    UInt16 Card() const
+    {
+        return s.Card(select);
+    }
+    LocalID DictID() const
+    {
+        return s.ID(select);
+    }
+    void GetName(Int16 selection, char *namebuf);
+    virtual ~DatabaseList();
+};
+
+DatabaseList::DatabaseList(Form *owner_in, UInt32 creator_in, 
+			   UInt32 type_in,
+			   char *name_out_in,
+			   DictionaryDatabase *db_in,
+			   UInt16 listid_in)
+  : List(owner_in, listid_in, &s),
+    s(creator_in, type_in), 
+    name_out(name_out_in),
+    db(db_in)
+{
+    s.InitChoices();
+}
+
+Boolean DatabaseList::HandleSelect(Int16 selection)
+{
+    if (name_out) 
+        strcpy(name_out, s.Name(selection));
+    if (db)
+    {
+        if (db->IsOpen())
+        {
+            db->FreeRecords();
+            db->Close();
+        }
+        db->OpenByID(s.ID(selection), s.Card(selection), dmModeReadOnly);
+        if (db->IsOpen())
+            db->InitRecords();
+    }
+    return List::HandleSelect(selection);
+}
+
+Boolean DatabaseList::Activate()
+{
+    return List::Activate();
+}
+
+DatabaseList::~DatabaseList()
+{
+}
+
+#endif
+
+#ifdef WORDFINDPRO
+
+class DictionaryList : public DatabaseList
 {
   public:
-    PalmWordDictList(class Form *owner_in, ULong creator_in, ULong type_in,
-    		char *name_out_in = 0, Database *db_in = 0,
-		UInt listid_in = 0)
-	: DatabaseList(owner_in, creator_in, type_in, name_out_in,
-			db_in, listid_in)
+    DictionaryList(Form *owner_in, DictionaryDatabase *db_in, UInt16 listID_in)
+    	: DatabaseList(owner_in, MY_CREATOR_ID, 'dict', 0,
+			db_in, listID_in)
     {}
+    virtual Boolean Activate()
+    {
+        s.InitChoices(); // refresh list
+	return DatabaseList::Activate();
+    }
+    virtual UInt16 TriggerID() const = 0;
+    virtual ~DictionaryList()
+    {}
+};
+
+class MainDictionaryList : public DictionaryList
+{
     LISTHANDLER(MainFormDictionaryList);
-    virtual ~PalmWordDictList()
+  public:
+    MainDictionaryList(Form *owner_in, DictionaryDatabase *db_in)
+      : DictionaryList(owner_in, db_in, MainFormDictionaryList)
+    {}
+    virtual UInt16 TriggerID() const
+    {
+        return MainFormDictionaryPopTrigger;
+    }
+};
+
+#ifdef USE_REGEXP
+
+class REDictionaryList : public DictionaryList
+{
+    LISTHANDLER(RegExpFormDictionaryList);
+  public:
+    REDictionaryList(Form *owner_in, DictionaryDatabase *db_in)
+      : DictionaryList(owner_in, db_in, RegExpFormDictionaryList)
+    {}
+    virtual UInt16 TriggerID() const
+    {
+        return RegExpFormDictionaryPopTrigger;
+    }
+};
+
+#endif
+
+#endif
+
+class DictFormDictList : public DatabaseList
+{
+  public:
+    DictFormDictList(Form *owner_in)
+    	: DatabaseList(owner_in, MY_CREATOR_ID, 'dict', 0, 0,
+			 DictFormDictionariesList)
+    {}
+    LISTHANDLER(DictFormDictionariesList);
+    virtual ~DictFormDictList()
     {}
 };
 
@@ -79,11 +264,32 @@ class PalmWordDictList : public DatabaseList
 
 // useful utility
 
-Form *GetForm(UInt id)
+Form *GetForm(UInt16 id)
 {
     Application *a = Application::Instance();
     return a ? a->GetForm(id) : 0;
 }
+
+class WordListSource : public ListSource
+{
+  private:
+    int nomore;
+#ifdef USE_REGEXP
+    int useRE;
+#endif
+    friend class WordList;
+  public:
+    inline WordListSource()
+      : ListSource(), nomore(0)
+    {}    
+    int Start(char *pattern, int matchtype, int multi, 
+    		int minlength, int maxlength, int mincount, int maxcount);
+#ifdef USE_REGEXP
+    int Start(const char *regexp);
+#endif
+    virtual UInt16 NumItems();
+    virtual Boolean GetItem(Int16 itemNum, Char* buf, UInt16 buflen, Char* *data);
+};
 
 class WordList
 #ifdef IS_FOR_PALM
@@ -91,55 +297,121 @@ class WordList
 #endif
 {
   protected:
-    char line[30];
-    int nomore;
-    int page;
 
     LISTHANDLER(WordFormWordsList)
-    virtual int NumItems();
 
+    WordListSource s;
   public:
-    virtual char *GetItem(UInt itemNum);
-    WordList(class Form *owner_in);
+    WordList(Form *owner_in);
     int NoMore() const
     {
-        return nomore;
+        return s.nomore;
     }
     void Reset()
     {
-        nomore = page = 0;
-        dict.Reset();
+        s.nomore = 0;
+        dict->Reset();
     }
     void NextPage()
     {
-        ++page;
-	dict.ClearProgress();
+	dict->ClearProgress();
     }
-    int Start();
-    virtual ~WordList()
+    inline int Start(char *pattern, int matchtype, int multi, 
+    		int minlength, int maxlength, int mincount, int maxcount)
     {
+        return s.Start(pattern, matchtype, multi, minlength, maxlength, mincount, maxcount);
     }
+#ifdef USE_REGEXP
+    inline int Start(const char *regexp)
+    {
+        return s.Start(regexp);
+    }
+#endif
 };
 
-WordList::WordList(class Form *owner_in) :
+WordList::WordList(Form *owner_in) :
 #ifdef IS_FOR_PALM
-   List(owner_in, WordFormWordsList),
+   List(owner_in, WordFormWordsList, &s),
 #endif
-   nomore(0),
-   page(0)
+   s()
 {
-    line[0] = 0;
 }
 
 #ifdef IS_FOR_PALM
 
+class RadioGroupDialog : public Dialog
+{
+    UInt16 firstcb;
+    UInt16 numcbs;
+    UInt16 val;
+    Char* title;
+    UInt16 GetValue();
+  public:
+    RadioGroupDialog(UInt16 id_in,
+    			UInt16 firstcb_in,
+    			UInt16 numcbs_in,
+    			UInt16 val_in,
+    			Char* title_in = 0)
+        : Dialog(id_in),
+          firstcb(firstcb_in),
+          numcbs(numcbs_in),
+          val(val_in),
+          title(title_in) // must be static
+    {}
+    virtual Boolean HandleSelect(UInt16 objID);
+    virtual Boolean Activate();
+    virtual UInt16 Run();
+    virtual ~RadioGroupDialog();
+};
+
+Boolean RadioGroupDialog::Activate()
+{
+    if (Dialog::Activate())
+    {
+        if (title) FrmSetTitle(frm, title);
+        for (UInt16 i = 0; i < numcbs; i++)
+            SetCheckBox(firstcb+i, (i==val));
+        return True;
+    }
+    return False;
+}
+
+Boolean RadioGroupDialog::HandleSelect(UInt16 objID)
+{
+    if (objID >= firstcb && objID < (firstcb+numcbs))
+    {
+        for (UInt16 i = 0; i < numcbs; i++)
+            SetCheckBox(firstcb+i, ((i==(objID-firstcb))?1u:0u));
+    }
+    return Dialog::HandleSelect(objID);
+}
+
+UInt16 RadioGroupDialog::Run()
+{
+    (void)Dialog::Run();
+    return GetValue();
+}
+
+UInt16 RadioGroupDialog::GetValue()
+{
+    for (UInt16 i = 0; i < numcbs; i++)
+    {
+        if (IsCheckBoxSet(firstcb+i))
+            return i;
+    }
+    return 0; // XXX should this be -1?
+}
+
+RadioGroupDialog::~RadioGroupDialog()
+{
+}
+
 class MatchTypeDialog : public RadioGroupDialog
 {
-    UInt val;
+    UInt16 val;
   public:
-    MatchTypeDialog(Form *parent_in, UInt val_in)
-        : RadioGroupDialog(parent_in,
-        	    	MatchTypeForm,
+    MatchTypeDialog(UInt16 val_in)
+        : RadioGroupDialog(MatchTypeForm,
         	    	MatchTypeNormalCheckbox,
         	    	3,
         	    	val_in)
@@ -149,9 +421,8 @@ class MatchTypeDialog : public RadioGroupDialog
 class WordLengthDialog : public RadioGroupDialog
 {
   public:
-    WordLengthDialog(Form *parent_in, UInt val_in, CharPtr title_in)
-        : RadioGroupDialog(parent_in, 
-        		   WordLengthForm,
+    WordLengthDialog(UInt16 val_in, Char* title_in)
+        : RadioGroupDialog(WordLengthForm,
         		   WordLengthNoLengthLimitCheckbox,
         		   16,
         		   val_in,
@@ -162,9 +433,8 @@ class WordLengthDialog : public RadioGroupDialog
 class WordCountDialog : public RadioGroupDialog
 {
   public:
-    WordCountDialog(Form *parent_in, UInt val_in, CharPtr title_in)
-        : RadioGroupDialog(parent_in,
-        	    	 WordCountForm,
+    WordCountDialog(UInt16 val_in, Char* title_in)
+        : RadioGroupDialog(WordCountForm,
         	    	 WordCountNoCountLimitCheckbox,
         	    	 14,
         	    	 val_in,
@@ -172,120 +442,256 @@ class WordCountDialog : public RadioGroupDialog
     {}
 };
 
+#ifdef VARVECT
 class VarAssignDialog : public RadioGroupDialog
 {
   public:
-    VarAssignDialog(Form *parent_in, UInt val_in)
-        : RadioGroupDialog(parent_in, 
-        		   VarAssignForm,
+    VarAssignDialog(UInt16 val_in)
+        : RadioGroupDialog(VarAssignForm,
         		   VarAssignNoAssignmentCheckbox,
         		   27,
         		   val_in,
         		   "Variable Assignment")
     {}
 };
+#endif
+
+class HistoryListSource : public ListSource
+{
+    History *history;
+  public:
+    HistoryListSource(History *history_in)
+      : ListSource(),
+        history(history_in)
+    { }
+    virtual UInt16 NumItems()
+    {
+        return history->MaxItems();
+    }
+    virtual Boolean GetItem(Int16 itemNum, Char *buf, UInt16 buflen, Char **data)
+    {
+        (void)data;
+	StrNCopy(buf, history->GetItem(itemNum), (Int16)(buflen-1));
+	buf[buflen-1] = 0;
+	return True;
+    }
+};
+
+// base class for history lists; must be subclassed as LISTHANDLER must be
+// form-specific
 
 class HistoryList : public List
 {
+    HistoryListSource s;
+  public:
+    HistoryList(Form *owner_in, UInt16 resid_in, History *history_in)
+      : List(owner_in, resid_in, &s),
+        s(history_in)
+    {}
+    Boolean GetItem(Int16 itemNum, Char* buf, UInt16 buflen)
+    {
+        return s.GetItem(itemNum, buf, buflen, 0);
+    }
+};
+
+class MainHistoryList : public HistoryList
+{
     LISTHANDLER(MainFormHistoryList)
   public:
-    HistoryList(Form *owner_in)
-      : List(owner_in, MainFormHistoryList)
-    { }
-    virtual int NumItems()
-    {
-        return history.NumItems();
-    }
-    virtual char *GetItem(UInt idx)
-    {
-	return history.GetItem(idx);
-    }
-    virtual ~HistoryList()
+    MainHistoryList(Form *owner_in, History *history_in)
+      : HistoryList(owner_in, MainFormHistoryList, history_in)
     {}
 };
 
-class MainForm: public Form
+#ifdef USE_REGEXP
+class REHistoryList : public HistoryList
+{
+    LISTHANDLER(RegExpFormHistoryList)
+  public:
+    REHistoryList(Form *owner_in, History *history_in)
+      : HistoryList(owner_in, RegExpFormHistoryList, history_in)
+    {}
+};
+#endif
+
+class DictForm: public Form
 {
   protected:
-    HistoryList historylist;
-    PalmWordDictList dictlist;
-    virtual List *GetList(UInt lidx)
+    DictFormDictList dictlist;
+    virtual Boolean HandleSelect(UInt16 objID)
     {
-        if (lidx == MainFormHistoryList)
-	    return &historylist;
-        else if (lidx == MainFormDictionaryList)
-	    return &dictlist;
-	else
-	    return 0;
+        switch (objID)
+        {
+        case DictFormDeleteButton:
+            if (dict->Card() == dictlist.Card() && dict->ID() == dictlist.DictID())
+		{
+		    dict->FreeRecords();
+                dict->Close(True);
+		}
+	    dictlist.Delete();
+	    // fall through
+        case DictFormCancelButton:
+	    Switch(MainFormForm);
+	    return True;
+	}
+	return False;
+    }
+  public:
+    DictForm()
+        : Form(DictFormForm, 1),
+          dictlist(this)
+    { }
+    virtual ~DictForm()
+    { }
+};
+
+//--------------------------------------------------
+// Base class for the main and regexp forms
+
+class ConsultForm: public Form
+{
+  protected:
+    History history;
+    HistoryList *historylist;
+    Field patfield;
+#ifdef WORDFINDPRO
+    DictionaryList *dictlist;
+#endif
+    char pattern[MAX_PAT_LEN];
+    char recall;
+
+    virtual void SetModalLabels();
+
+    virtual Boolean HandleOpen();
+    virtual void HandleClose();
+    virtual Boolean HandleKeyDown(UInt16 chr, UInt16 keyCode, UInt16 &modifiers);
+    virtual Boolean HandleSelect(UInt16 objID);
+    virtual Boolean HandlePopupListSelect(UInt16 triggerID,
+					UInt16 listID,
+					Int16 selection);
+    virtual Boolean HandleMenu(UInt16 menuID);
+    virtual int StartConsult(class WordForm *f) = 0;
+    void Go();
+
+  public:
+#ifdef WORDFINDPRO
+    ConsultForm(UInt16 resid, UInt16 patID, HistoryList *hist,
+    			DictionaryList *dlist);
+#else
+    ConsultForm(UInt16 resid, UInt16 patID, HistoryList *hist);
+#endif
+    virtual void PostHandle(EventType &event) = 0;
+    inline void ClearPattern()
+    {
+        pattern[0] = 0;
     }
     void SavePattern();
-    void SetModalLabels();
+    virtual ~ConsultForm();
+};
+
+class MainForm: public ConsultForm
+{
+  protected:
+    MainHistoryList hlist;
+#ifdef WORDFINDPRO
+    MainDictionaryList dlist;
+#endif
+    UInt16 matchtype;
+    UInt16 minlength;
+    UInt16 maxlength;
+    UInt16 mincount;
+    UInt16 maxcount;
+    UInt16 multi;
+    LetterCase letter_case;
+
+    virtual void SetModalLabels();
     void SetWordLengthModalControls();
     void SetWordCountModalControls();
     void SetLetterMode();
 
-    virtual void Init()
-    {
-        Form::Init();
-	historylist.Init();
-	dictlist.Init();
-    }
-    virtual Boolean Activate()
-    {
-        return (Form::Activate() && historylist.Activate() && dictlist.Activate());
-    }
-    virtual Boolean Open();
-    virtual Boolean HandleSelect(UInt objID);
-    virtual Boolean HandlePopupListSelect(UInt triggerID,
-					UInt listID,
-					UInt selection);
-    virtual Boolean HandleMenu(UInt menuID);
+    virtual Boolean HandleOpen();
+    virtual Boolean HandleSelect(UInt16 objID);
+    virtual int StartConsult(class WordForm *f);
 
   public:
-    void Restore();
-    void Save();
     MainForm();
+    void Restore(unsigned char *&lp);
+    void Save(unsigned char *&lp);
     virtual void PostHandle(EventType &event);
-    virtual ~MainForm()
-    { }
+    virtual ~MainForm();
 };
 
-class VariableList : public List
+#ifdef USE_REGEXP
+
+class RegExpForm: public ConsultForm
 {
   protected:
-    char rtn[40];
-    LISTHANDLER(VariableFormVariableList)
+    REHistoryList hlist;
+    REDictionaryList dlist;
+    virtual Boolean HandleSelect(UInt16 objID);
+    virtual int StartConsult(class WordForm *f);
+
   public:
-    VariableList(Form *owner_in)
-	: List(owner_in, VariableFormVariableList)
+    RegExpForm();
+    void Restore(unsigned char *&lp);
+    void Save(unsigned char *&lp);
+    virtual void PostHandle(EventType &event);
+    virtual ~RegExpForm();
+};
+
+#endif
+
+
+#ifdef VARVECT
+
+class VariableListSource : public ListSource
+{
+  public:
+    inline VariableListSource()
+	: ListSource()
     { }
-    virtual int NumItems()
+    virtual UInt16 NumItems()
     {
         return 26;
     }
+    virtual Boolean GetItem(Int16 itemNum, Char *buf, UInt16 buflen, Char **data)
+    {
+        (void)buflen;
+        (void)data;
+        // XXX we rely on Print producing a string shorter than buflen
+        vars->Print(buf, itemNum);
+        return True;
+    }
+};
+   
+class VariableList : public List
+{
+  protected:
+    VariableListSource s;
+    
+    LISTHANDLER(VariableFormVariableList)
+  public:
+    VariableList(Form *owner_in)
+	: List(owner_in, VariableFormVariableList, &s), s()
+    { }
     void ResetConstraints()
     {
-        vars.ResetConstraints();
+        vars->ResetConstraints();
     }
     void ClearAssignments()
     {
-        vars.ClearAssignments();
+        vars->ClearAssignments();
     }
-    virtual char *GetItem(UInt idx)
+    virtual Boolean HandleSelect(Int16 sel)
     {
-        vars.Print(rtn, (int)idx);
-	return rtn;
-    }
-    virtual Boolean HandleSelect(UInt sel)
-    {
-	char olda = vars.Assignment((int)sel);
+	char olda = vars->Assignment((int)sel);
 	if (olda) olda-='A'-1;
-	int x = (int)VarAssignDialog(owner, (UInt)olda).Run();
-	vars.Assign((int)sel, (char)((x ? (x+'A'-1) : 0)));
-	return List::HandleSelect(sel);
-    }
-    virtual ~VariableList()
-    {
+	int x = (int)VarAssignDialog((UInt16)olda).Run();
+	vars->Assign((int)sel, (char)((x ? (x+'A'-1) : 0)));
+	Boolean rtn = List::HandleSelect(sel);
+	Form *f = Application::Instance()->GetForm();
+	if (f) f->Draw();
+	return rtn;
     }
 };
 
@@ -293,8 +699,8 @@ class VariableForm : public Form
 {
   protected:
     VariableList list;
-    UInt caller;
-    virtual Boolean HandleSelect(UInt objID)
+    UInt16 caller;
+    virtual Boolean HandleSelect(UInt16 objID)
     {
         switch (objID)
         {
@@ -314,60 +720,49 @@ class VariableForm : public Form
     }
   public:
     VariableForm()
-        : Form(VariableFormForm),
+        : Form(VariableFormForm, 1),
           list(this),
 	  caller(MainFormForm)
-    {}
-    virtual void Init()
     {
-        Form::Init();
-	list.Init();
     }
-    virtual Boolean Activate()
-    {
-        if (Form::Activate()) return list.Activate();
-	return False;
-    }
-    void SetCaller(UInt caller_in)
+    void SetCaller(UInt16 caller_in)
     {
         caller = caller_in;
     }
-    virtual Boolean HandleListSelect(UInt listID, UInt selection)
-    {
-        (void)listID;
-        (void)list.HandleSelect(selection);
-	Draw();
-	return False;
-    }
-    virtual List *GetList(UInt lidx)
-    {
-        (void)lidx;
-        return &list;
-    }
 };
+
+#endif
 
 class WordForm : public Form
 {
   protected:
   
     WordList list;
+    UInt16 caller;
     
-    virtual void Init();
-    virtual Boolean Activate()
-    {
-        if (Form::Activate()) return list.Activate();
-	return False;
-    }
-    virtual Boolean Open();
-    virtual Boolean HandleSelect(UInt objID);
-    virtual Boolean Update();
+    virtual Boolean Activate();
+    virtual Boolean HandleOpen();
+    virtual Boolean HandleKeyDown(UInt16 chr, UInt16 keyCode, UInt16 &modifiers);
+    virtual Boolean HandleSelect(UInt16 objID);
+    virtual Boolean HandleUpdate();
     
+    void New();
+    void NextPage();
+    void Restart();
+#ifdef VARVECT
+    void ShowVars();
+#endif
+
   public:
   
     WordForm()
-        : Form(WordFormForm),
+        : Form(WordFormForm, 1),
           list(this)
     { 
+    }
+    void SetCaller(UInt16 caller_in)
+    {
+        caller = caller_in;
     }
     void EnableNextButton()
     {
@@ -377,34 +772,45 @@ class WordForm : public Form
     {
         DisableControl(WordFormNextButton);
     }
-    void ClearProgress();
-    virtual void ShowProgress(int p);
     void ShowDebug(int sp, unsigned long n);
-    virtual List *GetList(UInt lidx)
+    int Start(char *pattern, int matchtype, int multi, 
+    		int minlength, int maxlength, int mincount, int maxcount)
     {
-        if (lidx == WordFormWordsList)
-	    return &list;
-	else
-	    return 0;
+        return list.Start(pattern, matchtype, multi, minlength, maxlength, mincount, maxcount);
     }
-    int Start()
+#ifdef USE_REGEXP
+    int Start(char *pattern)
     {
-        return list.Start();
+        return list.Start(pattern);
     }
+#endif
 };
 
-class PalmWordApplication : public Application
+class WordFindApplication : public Application
 {
   protected:
     MainForm mainform;
     WordForm wordform;
+#ifdef USE_REGEXP
+    RegExpForm REform;
+    UInt16 consultformID;
+#endif
+#ifdef VARVECT
     VariableForm variableform;
-    virtual Form *TopForm();
+#endif
+    DictForm dictform;
     virtual void Stop();
   public:
-    PalmWordApplication();
-    virtual Form *GetForm(UInt formID);
-    virtual ~PalmWordApplication()
+    WordFindApplication();
+    void SaveSettings();
+    void RestoreSettings();
+#ifdef USE_REGEXP
+    void SetConsultFormID(UInt16 id_in)
+    {
+        consultformID = id_in;
+    }
+#endif
+    virtual ~WordFindApplication()
     {
     }
 };
@@ -413,42 +819,73 @@ class PalmWordApplication : public Application
 
 //---------------------------------------------------------
 
-int WordList::Start()
+int WordListSource::Start(char *pattern, int matchtype, int multi, 
+			int minlength, int maxlength, 
+			int mincount, int maxcount)
 {
-    if (dict.StartConsult(pattern, (int)matchtype, (int)multi,
-        				(int)minlength, (int)maxlength,
-        				(int)mincount, (int)maxcount, 
-					&vars) != 0)
-    {
-        nomore = 1;
-        return -1;
-    }
-    nomore = page = 0;
-    return 0;
+    int x = dict->StartConsult(pattern, matchtype, multi,
+        				minlength, maxlength,
+        				mincount, maxcount,
+#ifdef VARVECT
+					vars);
+#else
+					0);
+#endif
+    nomore = (x != 0);
+#ifdef USE_REGEXP
+    useRE = 0;
+#endif
+    return x;
 }
 
-int WordList::NumItems()
+#ifdef USE_REGEXP
+
+int WordListSource::Start(const char *regexp)
+{
+    int x = dict->StartREConsult(regexp);
+    nomore = (x != 0);
+    useRE = 1;
+    return x;
+}
+
+#endif
+
+UInt16 WordListSource::NumItems()
 {
     return NumWordListItems;
 }
 
-char *WordList::GetItem(UInt itemNum)
+Boolean WordListSource::GetItem(Int16 itemNum, Char* buf, UInt16 buflen, Char* *data)
 {
     int x;
+    (void)data;
     (void)itemNum;
-    line[0] = line[MAX_PAT_LEN-1] = 0;
-    if (!nomore && (x = dict.NextMatch(line, MAX_PAT_LEN)) < 0)
+    buf[0] = buf[buflen-1] = 0;
+    if (!nomore)
     {
-        strcpy(line, ltoa(dict.Matches()));
-        strcat(line, " matches");
-        if (x == -2) strcat(line, "(interrupted)");
-        nomore = 1;
-#ifdef IS_FOR_PALM
-        ((WordForm*)owner)->DisableNextButton();
+#ifdef USE_REGEXP
+        if (useRE)
+            x = dict->NextREMatch(buf, (int)buflen);
+        else
 #endif
+            x = dict->NextMatch(buf, (int)buflen);
+        if (x < 0)
+        {
+            // making assumptions about the size below! XXX
+            StrIToA(buf, dict->Matches());
+            strcat(buf, " matches");
+            if (x == -2) strcat(buf, "(interrupted)");
+            nomore = 1;
+#ifdef IS_FOR_PALM
+            Form *owner = Application::Instance()->GetForm();
+            if (owner) ((WordForm*)owner)->DisableNextButton();
+#endif
+            return True;
+        }
     }
-    return line;
+    return nomore ? False : True;
 }
+
 
 //------------------------------------------------------------------------
 
@@ -475,7 +912,7 @@ int main(int argc, char **argv)
 	}
 	else
 	{
-    	    list.Start(argv[i], typ, multi, 0, 0, 0, 0, &vars);
+    	    list.Start(argv[i], typ, multi, 0, 0, 0, 0, vars);
 	    break;
 	}
     }
@@ -484,7 +921,7 @@ int main(int argc, char **argv)
     {
         puts(list.GetItem((UInt)(w++)));
     }
-    vars.Show();
+    vars->Show();
 }
 
 #else
@@ -493,116 +930,250 @@ int main(int argc, char **argv)
 
 #ifdef IS_FOR_PALM
 
-void /*MainForm::*/Restore()
+#ifdef WORDFINDPRO
+ConsultForm::ConsultForm(UInt16 resID_in, UInt16 patID_in,
+			 HistoryList *hlist, DictionaryList *dlist)
+    : Form(resID_in, 3),
+      history(MAX_PAT_LEN),
+      historylist(hlist),
+      patfield(this, patID_in),
+      dictlist(dlist),
+      recall(0)
+#else
+ConsultForm::ConsultForm(UInt16 resID_in, UInt16 patID_in,
+			 HistoryList *hlist)
+    : Form(resID_in, 3),
+      history(MAX_PAT_LEN),
+      historylist(hlist),
+      patfield(this, patID_in),
+      recall(0)
+#endif
 {
-    Database config;
     pattern[0] = 0;
+}
+
+void ConsultForm::SetModalLabels()
+{
+    patfield.Set(pattern);
+#ifdef WORDFINDPRO
+    if (dict->Name()[0])
+        SetControlLabel(dictlist->TriggerID(), dict->Name());
+    else
+        SetControlLabel(dictlist->TriggerID(), "No Dictionary");
+#endif
+}
+
+Boolean ConsultForm::HandleOpen()
+{
+    SetModalLabels();
+    Form::HandleOpen();
+    SetFocus(patfield.ID());
+#ifdef USE_REGEXP
+    ((WordFindApplication*)Application::Instance())->SetConsultFormID(id);
+#endif
+    return True;
+}
+
+void ConsultForm::SavePattern()
+{
+    patfield.Read(pattern, MAX_PAT_LEN);
+}
+
+void ConsultForm::HandleClose()
+{
+    SavePattern();
+    Form::HandleClose();
+}
+
+Boolean ConsultForm::HandleKeyDown(UInt16 chr, UInt16 keyCode, UInt16 &modifiers)
+{
+    (void)keyCode;
+    (void)modifiers;
+    if (chr == '~')
+    {
+        recall = 1;
+	return True;
+    }
+    else if (chr >= '0' && chr <= '9' && recall)
+    {
+        recall = 0;
+	historylist->GetItem((Int16)(chr-'0'), pattern, MAX_PAT_LEN);
+	SetModalLabels();
+	return True;
+    }
+    else recall = 0;
+    if (chr =='\n')
+    {
+        Go();
+	return True;
+    }
+    return False;
+}
+
+Boolean ConsultForm::HandleSelect(UInt16 objID)
+{
+    return Form::HandleSelect(objID);
+}
+
+Boolean ConsultForm::HandlePopupListSelect(UInt16 triggerID,
+					UInt16 listID,
+					Int16 selection)
+{
+    (void)listID;
+    if (listID == historylist->ID())
+    {
+        historylist->GetItem(selection, pattern, MAX_PAT_LEN);
+        SetControlLabel(triggerID, "History");
+        DrawControl(triggerID);
+    }
+#ifdef WORDFINDPRO
+    else if (listID == dictlist->ID())
+    {
+        dictlist->HandleSelect(selection);
+    }
+#endif
+    SetModalLabels();
+    return True; 
+}
+
+Boolean ConsultForm::HandleMenu(UInt16 menuID)
+{
+    switch(menuID)
+    {
+#ifdef HelpAboutWordFind
+    case HelpAboutWordFind:
+#endif
+#ifdef HelpAboutWordFindPro
+    case HelpAboutWordFindPro:
+#endif
+        FrmAlert(AboutBoxAlert);
+        return true;
+#ifdef VARVECT
+    case EditClearAssignments:
+	vars->ClearAssignments();
+        return true;
+    case EditResetConstraints:
+        vars->ResetConstraints();
+        return true;
+    case EditShowConstraints:
+      {
+	VariableForm *f = (VariableForm*)GetForm(VariableFormForm);
+	if (f) 
+	{
+	    f->SetCaller(MainFormForm);
+	    Switch(VariableFormForm);
+	}
+        return True;
+      }
+#endif
+    case EditDeleteDictionary:
+	Switch(DictFormForm);
+	return True;
+    default:
+        return Form::HandleMenu(menuID);
+    }
+    return false;
+}
+
+void ConsultForm::Go()
+{
+    SavePattern();
+    if (pattern[0])
+    {
+        history.Add(pattern);
+        ((WordFindApplication*)Application::Instance())->SaveSettings();
+        WordForm *wordform = (WordForm*)::GetForm(WordFormForm);
+        if (wordform)
+        {
+            int x = StartConsult(wordform);
+            if (x == 0)
+            {
+                wordform->SetCaller(ID());
+    	        Switch(WordFormForm);
+    	    }
+    	    else if (x == -1)
+    	        FrmAlert(NoDictBoxAlert); 
+    	    else
+    	        FrmAlert(BadSearchAlert);
+        }
+    }
+}
+
+ConsultForm::~ConsultForm()
+{ 
+}
+
+//---------------------------------------------------------------------------
+// XXX arguably, we should be using prefSetAppPreferences and
+// prefGetAppPreferences for this, rather than a separate 
+// config database.
+
+MainForm::MainForm()
+#ifdef WORDFINDPRO
+    : ConsultForm(MainFormForm, MainFormPatternField, &hlist, &dlist),
+      hlist(this, &history),
+      dlist(this, dict)
+#else
+    : ConsultForm(MainFormForm, MainFormPatternField, &hlist),
+      hlist(this, &history)
+#endif
+{
     minlength = maxlength = mincount = maxcount = 0;
     matchtype = USEALL;
     multi = 0;
     letter_case = UPPER;
-    if (config.Open(ConfigDBType) == True)
-    {
-        VoidHand h = config.QueryRecord(0);
-        if (h)
-        {
-	    unsigned char *lp = (unsigned char*)MemHandleLock(h);
-	    if (lp && MemHandleSize(h) >= CFGSZ)
-	    {
-	        minlength = *((UInt*)lp)++;
-	        maxlength = *((UInt*)lp)++;
-	        mincount = *((UInt*)lp)++;
-	        maxcount = *((UInt*)lp)++;
-	        matchtype = *((UInt*)lp)++;
-	        multi = *((UInt*)lp)++;
-	    	strncpy(pattern, (const char *)lp, MAX_PAT_LEN);
-	    	pattern[MAX_PAT_LEN-1] = 0;
-		lp += MAX_PAT_LEN;
-		lp = history.Restore(lp);
-#ifdef VARVECT
-		for (int i = 0; i < 26; i++)
-	            vars.Assign(i, *((char*)lp)++);
-#endif
-		dict.SetCard(*((UInt*)lp)++);
-		dict.SetID(*((ULong*)lp)++);
-	    }
-
-	    MemHandleUnlock(h);
-	    if (matchtype == ALL)
-		minlength = maxlength = 0;
-	}
-    }
 }
 
-void /*MainForm::*/Save()
+void MainForm::Save(unsigned char *&lp)
 {
-    Database config;
-    VoidHand h = 0;
-    if (config.Open(ConfigDBType) == True)
-	h = config.GetRecord(0);
-    else if (config.Create("pwcfg", ConfigDBType) != True)
-        return;
-    if (h == 0)
-	h = config.NewRecord(0, CFGSZ);
-    else if (MemHandleSize(h) != CFGSZ)
-        h = config.Resize(0, CFGSZ);
-    if (h)
-    {
-#if 0
-	CharPtr pat = ReadField(MainFormPatternField);
-	if (pat==0) pat=pattern; // last known value
-#else
-	CharPtr pat = pattern;
-#endif
-	unsigned char lpbuf[CFGSZ];
-	unsigned char *dp = (unsigned char*)MemHandleLock(h);
-	if (dp)
-	{
-	    memcpy((char*)lpbuf, (const char *)dp, (unsigned)CFGSZ);
-	    unsigned char *lp = lpbuf;
-	    *((UInt*)lp)++ = minlength;
-	    *((UInt*)lp)++ = maxlength;
-	    *((UInt*)lp)++ = mincount;
-	    *((UInt*)lp)++ = maxcount;
-	    *((UInt*)lp)++ = matchtype;
-	    *((UInt*)lp)++ = multi;
-	    strncpy((char *)lp, (const char *)pat, MAX_PAT_LEN);
-	    lp += sizeof(pattern);
-	    lp = history.Save(lp);
+    *((UInt16*)lp)++ = minlength;
+    *((UInt16*)lp)++ = maxlength;
+    *((UInt16*)lp)++ = mincount;
+    *((UInt16*)lp)++ = maxcount;
+    *((UInt16*)lp)++ = matchtype;
+    *((UInt16*)lp)++ = multi;
+    // must maintain even addresses, so cast to UInt16 below...
+    *((UInt16*)lp)++ = (UInt16)letter_case;
+    strncpy((char *)lp, (const char *)pattern, MAX_PAT_LEN);
+    lp += MAX_PAT_LEN;
+    lp = history.Save(lp);
 #ifdef VARVECT
-	    for (int i = 0; i < 26; i++)
-	        *((char*)lp)++ = vars.Assignment(i);
+    if (vars)
+        for (int i = 0; i < 26; i++)
+            *((char*)lp)++ = vars->Assignment(i);
 #endif
-	    *((UInt*)lp)++ = dict.Card();
-	    *((ULong*)lp)++ = dict.ID();
-
-	    // still to do - WordForm stack context
-	    config.WriteRecord(dp, lpbuf, CFGSZ); 
-	}
-        MemHandleUnlock(h);
-	config.ReleaseRecord(0);
-    }
 }
 
-MainForm::MainForm()
-    : Form(MainFormForm),
-      historylist(this),
-      dictlist(this, MY_CREATOR_ID, 'dict', /*name_out*/0, &dict, MainFormDictionaryList)
+void MainForm::Restore(unsigned char *&lp)
 {
+    minlength = *((UInt16*)lp)++;
+    maxlength = *((UInt16*)lp)++;
+    mincount = *((UInt16*)lp)++;
+    maxcount = *((UInt16*)lp)++;
+    matchtype = *((UInt16*)lp)++;
+    multi = *((UInt16*)lp)++;
+    letter_case = (LetterCase)(*((UInt16*)lp)++);
+    strncpy(pattern, (const char *)lp, MAX_PAT_LEN);
+    pattern[MAX_PAT_LEN-1] = 0;
+    lp += MAX_PAT_LEN;
+    lp = history.Restore(lp);
+#ifdef VARVECT
+    if (vars)
+        for (int i = 0; i < 26; i++)
+            vars->Assign(i, *((char*)lp)++);
+#endif
+    if (matchtype == ALL)
+	minlength = maxlength = 0;
 }
 
 void MainForm::SetLetterMode()
 {
-    Boolean caps, num, aut;
-    Word temp;
-    GrfGetState(&caps, &num, &temp, &aut);
-    caps = (letter_case==LOWER)?False:True;
-    GrfSetState(caps, num, False);
+    Application::SetLetterCapsMode((letter_case==LOWER)?False:True);
 }
 
 void MainForm::SetWordLengthModalControls()
 {
-    int cando = (multi || matchtype != USEALL);
+    int cando = (multi || (matchtype != USEALL));
     if (!cando) minlength = maxlength = 0;
     SetControlLabel(MainFormMinLengthSelTrigger, DictionaryDatabase::LimitName(minlength));
     SetControlLabel(MainFormMaxLengthSelTrigger, DictionaryDatabase::LimitName(maxlength));
@@ -621,18 +1192,20 @@ void MainForm::SetWordCountModalControls()
 
 void MainForm::SetModalLabels()
 {
+    ConsultForm::SetModalLabels();
     SetCheckBox(MainFormMultiCheckbox, multi);
-    SetField(MainFormPatternField, pattern);
     SetControlLabel(MainFormMatchTypeSelTrigger, DictionaryDatabase::MatchTypeName(matchtype));
     SetWordCountModalControls();
     SetWordLengthModalControls();
     SetControlLabel(MainFormCaseButton, (letter_case==LOWER?"Floating":"Anchored"));
-    if (dict.Name()[0])
-        SetControlLabel(MainFormDictionaryPopTrigger, dict.Name());
-    else
-        SetControlLabel(MainFormDictionaryPopTrigger, "Default Dictionary");
-    FrmSetFocus(frm, FrmGetObjectIndex(frm, MainFormPatternField));
     SetLetterMode();
+}
+
+Boolean MainForm::HandleOpen()
+{
+    Boolean rtn = ConsultForm::HandleOpen();
+    SetLetterMode();
+    return rtn;
 }
 
 void MainForm::PostHandle(EventType &event)
@@ -641,47 +1214,44 @@ void MainForm::PostHandle(EventType &event)
         SetLetterMode();    
 }
 
-Boolean MainForm::Open()
+int MainForm::StartConsult(WordForm *f)
 {
-    SetModalLabels();
-    return Form::Open();
+    return f->Start(pattern, (int)matchtype,
+            			(int)multi, 
+    				(int)minlength, (int)maxlength, 
+    				(int)mincount, (int)maxcount);
 }
 
-void MainForm::SavePattern()
-{
-    CharPtr pat = ReadField(MainFormPatternField);
-    if (pat && pat[0])
-    {
-        strncpy(pattern, (const char *)pat, MAX_PAT_LEN-1);
-        pattern[MAX_PAT_LEN-1] = 0;
-    }
-}
-
-Boolean MainForm::HandleSelect(UInt objID)
+Boolean MainForm::HandleSelect(UInt16 objID)
 {
     switch (objID)
     {
+#ifdef USE_REGEXP
+    case MainFormPatPromptButton:
+        Switch(RegExpFormForm);
+        break;
+#endif
     case MainFormMatchTypeSelTrigger:
-    	matchtype = MatchTypeDialog(this, matchtype).Run();
+    	matchtype = MatchTypeDialog(matchtype).Run();
 	SetControlLabel(MainFormMatchTypeSelTrigger, DictionaryDatabase::MatchTypeName(matchtype));
 	SetWordLengthModalControls();
 	break;
     case MainFormMinLengthSelTrigger:
         //if (matchtype == USEALL) break;
-	minlength = WordLengthDialog(this, minlength, "Min Word Length").Run();
+	minlength = WordLengthDialog(minlength, "Min Word Length").Run();
 	SetControlLabel(MainFormMinLengthSelTrigger, DictionaryDatabase::LimitName(minlength));
 	break;
     case MainFormMaxLengthSelTrigger:
         //if (matchtype == USEALL) break;
-	maxlength = WordLengthDialog(this, maxlength, "Max Word Length").Run();
+	maxlength = WordLengthDialog(maxlength, "Max Word Length").Run();
 	SetControlLabel(MainFormMaxLengthSelTrigger, DictionaryDatabase::LimitName(maxlength));
 	break;
     case MainFormMinCountSelTrigger:
-	mincount = WordCountDialog(this, mincount, "Min Word Count").Run();
+	mincount = WordCountDialog(mincount, "Min Word Count").Run();
     	SetControlLabel(MainFormMinCountSelTrigger, DictionaryDatabase::LimitName(mincount));
     	break;
     case MainFormMaxCountSelTrigger:
-	maxcount = WordCountDialog(this, maxcount, "Max Word Count").Run();
+	maxcount = WordCountDialog(maxcount, "Max Word Count").Run();
         SetControlLabel(MainFormMaxCountSelTrigger, DictionaryDatabase::LimitName(maxcount));
 	break;
     case MainFormCaseButton: // toggle case and labels
@@ -690,196 +1260,191 @@ Boolean MainForm::HandleSelect(UInt objID)
 	SetModalLabels();
 	break;
     case MainFormClearButton:
-        ClearField(MainFormPatternField);
+        patfield.Clear();
 	pattern[0] = 0;
         break;
     case MainFormBreakButton:
-        InsertInField(MainFormPatternField, '|');
+        patfield.Insert('|');
         break;
     case MainFormSpaceButton:
-        InsertInField(MainFormPatternField, ' ');
+        patfield.Insert(' ');
         break;
     case MainFormSlashButton:
-        InsertInField(MainFormPatternField, '/');
+        patfield.Insert('/');
         break;
     case MainFormWildButton:
-        InsertInField(MainFormPatternField, (letter_case == LOWER) ? '.' : ':');
+        patfield.Insert((letter_case == LOWER) ? '.' : ':');
         break;
     case MainFormVowelButton:
-        InsertInField(MainFormPatternField, (letter_case == LOWER) ? '+' : '*');
+        patfield.Insert((letter_case == LOWER) ? '+' : '*');
         break;
     case MainFormConsonantButton:
-        InsertInField(MainFormPatternField, (letter_case == LOWER) ? '-' : '=');
+        patfield.Insert((letter_case == LOWER) ? '-' : '=');
         break;
     case MainFormLeftBracketButton:
-        InsertInField(MainFormPatternField, '[');
+        patfield.Insert('[');
         break;
     case MainFormRightBracketButton:
-        InsertInField(MainFormPatternField, ']');
+        patfield.Insert(']');
         break;
     case MainFormRangeButton:
-        InsertInField(MainFormPatternField, '-');
+        patfield.Insert('-');
         break;
     case MainFormNegateButton:
-        InsertInField(MainFormPatternField, '^');
+        patfield.Insert('^');
         break;
     case MainFormMultiCheckbox:
         multi = !multi;
 	SetWordCountModalControls();
+	SetWordLengthModalControls();
 	break;
     case MainFormGoButton:
-	SavePattern();
-	if (pattern[0])
-	{
-	    history.Add(pattern);
-	    ::Save();
-            WordForm *wordform = (WordForm*)::GetForm(WordFormForm);
-            if (wordform)
-            {
-                if (wordform->Start() == 0)
-		    wordform->PostLoadEvent();
-		else
-		    FrmAlert(NoDictBoxAlert); 
-            }
-        }
+        Go();
 	break;
     default:
-	return False;
+	return ConsultForm::HandleSelect(objID);
     }
     return True;
 }
 
-Boolean MainForm::HandlePopupListSelect(UInt triggerID,
-					UInt listID,
-					UInt selection)
-{
-    (void)listID;
-    if (triggerID == MainFormHistoryPopTrigger)
-    {
-        const char *text = historylist.GetItem(selection);
-        if (text) strcpy(pattern, text);
-        SetControlLabel(MainFormHistoryPopTrigger, "History");
-        DrawControl(MainFormHistoryPopTrigger);
-        SetModalLabels();
-    }
-    else if (triggerID == MainFormDictionaryPopTrigger)
-    {
-        dictlist.HandleSelect(selection);
-        SetModalLabels();
-    }
-    return True; 
+MainForm::~MainForm()
+{ 
 }
 
-Boolean MainForm::HandleMenu(UInt menuID)
+//----------------------------------------------------------------
+
+#ifdef USE_REGEXP
+
+RegExpForm::RegExpForm()
+#ifdef WORDFINDPRO
+    : ConsultForm(RegExpFormForm, RegExpFormPatternField, &hlist, &dlist),
+      hlist(this, &history),
+      dlist(this, dict)
+#else
+    : ConsultForm(RegExpFormForm, RegExpFormPatternField, &hlist),
+      hlist(this, history)
+#endif
 {
-    VariableForm *f;
-    switch(menuID)
-    {
-    case HelpAboutPalmWord:
-        FrmAlert(AboutBoxAlert);
-        return true;
-    case EditClearAssignments:
-#ifdef VARVECT
-	vars.ClearAssignments();
-#endif
-        return true;
-    case EditResetConstraints:
-#ifdef VARVECT
-        vars.ResetConstraints();
-#endif
-        return true;
-    case EditShowConstraints:
-#ifdef VARVECT
-	f = (VariableForm*)GetForm(VariableFormForm);
-	if (f) 
-	{
-	    f->SetCaller(MainFormForm);
-	    Switch(VariableFormForm);
-	}
-#endif
-        return true;
-    case EditUndo:
-    case EditCut:
-    case EditCopy:
-    case EditPaste:
-    case EditSelectAll:
-      {
-	Word focus = FrmGetFocus(frm);
-        if (focus == noFocus)
-            return false;
-        FormObjectKind objtype = FrmGetObjectType(frm, focus);
-        if (objtype != frmFieldObj)
-            return false;
-        FieldPtr fld = (FieldPtr)FrmGetObjectPtr(frm, focus);
-	if (!fld) return false;
-	switch(menuID)
-	{
-    	case EditUndo:
-    	    FldUndo(fld);
-    	    break;
-    	case EditCut:
-    	    FldCut(fld);
-    	    break;
-    	case EditCopy:
-    	    FldCopy(fld);
-    	    break;
-    	case EditPaste:
-    	    FldPaste(fld);
-    	    break;
-    	case EditSelectAll:
-	    FldSetSelection(fld, 0, FldGetTextLength(fld));
-	    break;
-      	}
-      	return true;
-      }
-    case EditKeyboard:
-        SysKeyboardDialog(kbdDefault);
-	return true;
-    case EditGraffiti:
-        SysGraffitiReferenceDialog(referenceDefault);
-	return true;
-    }
-    return false;
 }
+
+void RegExpForm::Save(unsigned char *&lp)
+{
+    strncpy((char *)lp, (const char *)pattern, MAX_PAT_LEN);
+    lp += MAX_PAT_LEN;
+    lp = history.Save(lp);
+}
+
+void RegExpForm::Restore(unsigned char *&lp)
+{
+    strncpy(pattern, (const char *)lp, MAX_PAT_LEN);
+    pattern[MAX_PAT_LEN-1] = 0;
+    lp += MAX_PAT_LEN;
+    lp = history.Restore(lp);
+}
+
+Boolean RegExpForm::HandleSelect(UInt16 objID)
+{
+    switch (objID)
+    {
+    case RegExpFormREPromptButton:
+#ifdef USE_REGEXP
+        Switch(MainFormForm);
+#endif
+        break;
+    case RegExpFormClearButton:
+        patfield.Clear();
+	pattern[0] = 0;
+        break;
+    case RegExpFormWildButton:
+        patfield.Insert('.');
+        break;
+    case RegExpFormVowelButton:
+        patfield.Insert("[aeiou]");
+        break;
+    case RegExpFormConsonantButton:
+        patfield.Insert("[^aeiou]");
+        break;
+    case RegExpFormLeftBracketButton:
+        patfield.Insert('[');
+        break;
+    case RegExpFormRightBracketButton:
+        patfield.Insert(']');
+        break;
+    case RegExpFormRangeButton:
+        patfield.Insert('-');
+        break;
+    case RegExpFormNegateButton:
+        patfield.Insert('^');
+        break;
+    case RegExpFormZeroOrMoreButton:
+        patfield.Insert('*');
+        break;
+    case RegExpFormOneOrMoreButton:
+        patfield.Insert('+');
+        break;
+    case RegExpFormZeroOrOneButton:
+        patfield.Insert('?');
+        break;
+    case RegExpFormWordEndButton:
+        patfield.Insert('$');
+        break;
+    case RegExpFormGoButton:
+        Go();
+	break;
+    default:
+	return ConsultForm::HandleSelect(objID);
+    }
+    return True;
+}
+
+int RegExpForm::StartConsult(WordForm *f)
+{
+    return f->Start(pattern);
+}
+
+void RegExpForm::PostHandle(EventType &event)
+{
+    (void)event;
+}
+
+RegExpForm::~RegExpForm()
+{ 
+}
+
+#endif
 
 //------------------------------------------------------------------------
 
-void WordForm::Init()
+Boolean WordForm::Activate()
 {
-    Form::Init();
-    list.Init();
-    EnableNextButton();
+    if (Form::Activate())
+    {
+        EnableNextButton();
+        return True;
+    }
+    return False;
 }
 
-Boolean WordForm::Open()
+Boolean WordForm::HandleOpen()
 {
-    if (Form::Open())
+    if (Form::HandleOpen())
     {
         DrawControl(WordFormStopButton);
-        dict.SetProgressOwner(this);
         ClearProgress();
 	return True;
     }
     return False;
 }
 
-void WordForm::ClearProgress()
-{
-    ClearRectangle(153, 15, 5, 120);
-}
 
-void WordForm::ShowProgress(int p)
-{
-    DrawRectangle(153, 15, 5, p);
-}
-
+#if 0
 void WordForm::ShowDebug(int sp, unsigned long n)
 {
     static char l[40];
     strcpy(l, "sp ");
-    strcat(l, ltoa((unsigned long)sp));
+    StrIToA(l+3, sp);
     strcat(l, "  n ");
-    strcat(l, ltoa(n));
+    StrIToA(l+strlen(l), (long)n);
     FieldPtr fld = (FieldPtr)GetObject(WordFormDebugField);
     if (fld)
     {
@@ -888,96 +1453,233 @@ void WordForm::ShowDebug(int sp, unsigned long n)
         FldDrawField(fld);
     }
 }
+#endif
 
-Boolean WordForm::HandleSelect(UInt objID)
+void WordForm::New()
 {
-    VariableForm *f;
+    ConsultForm *f = (ConsultForm*)GetForm(caller);
+    if (f) f->ClearPattern();
+    Switch(caller);
+}
+
+void WordForm::NextPage()
+{
+    if (!list.NoMore())
+    {
+        list.NextPage();
+	PostUpdateEvent();
+    }
+}
+
+void WordForm::Restart()
+{
+    list.Reset();
+    EnableNextButton();
+    ClearProgress();
+    PostUpdateEvent();
+}
+
+#ifdef VARVECT
+void WordForm::ShowVars()
+{
+    VariableForm *f = (VariableForm*)GetForm(VariableFormForm);
+    if (f) 
+    {
+        list.Reset();
+        EnableNextButton();
+        ClearProgress();
+        f->SetCaller(WordFormForm);
+        Switch(VariableFormForm);
+    }
+}
+#endif
+
+Boolean WordForm::HandleKeyDown(UInt16 chr, UInt16 keyCode, UInt16 &modifiers)
+{
+    (void)keyCode;
+    (void)modifiers;
+    switch (chr)
+    {
+    case '\n':
+    case pageDownChr:
+        NextPage();
+	break;
+    case 'r':
+    case 'R':
+    case pageUpChr:
+        Restart();
+	break;
+    case 'n':
+    case 'N':
+    case 8:
+        New();
+	break;
+#ifdef VARVECT
+    case 'v':
+    case 'V':
+        ShowVars();
+	break;
+#endif
+    default:
+        return False;
+    }
+    return True;
+}
+
+Boolean WordForm::HandleSelect(UInt16 objID)
+{
     switch (objID)
     {
     case WordFormNewButton:
-	Switch(MainFormForm);
+        New();
 	return true;
     case WordFormNextButton:
-        if (!list.NoMore())
-        {
-            list.NextPage();
-	    PostUpdateEvent();
-	}
+        NextPage();
 	return true;
     case WordFormRestartButton:
-	list.Reset();
-	EnableNextButton();
-	ClearProgress();
-	PostUpdateEvent();
+        Restart();
 	return true;
+#ifdef VARVECT
     case WordFormVarsButton:
-	f = (VariableForm*)GetForm(VariableFormForm);
-	if (f) 
-	{
-	    list.Reset();
-	    EnableNextButton();
-	    ClearProgress();
-	    f->SetCaller(WordFormForm);
-	    Switch(VariableFormForm);
-	}
+        ShowVars();
         return true;
+#endif
     }
     return false;
 }
 
-Boolean WordForm::Update()
+Boolean WordForm::HandleUpdate()
 {
     list.Erase();
-    return Form::Update();
+    return Form::HandleUpdate();
 }
 
 //------------------------------------------------------------------------
 
-PalmWordApplication::PalmWordApplication()
-  : Application(),
+WordFindApplication::WordFindApplication()
+#if defined(VARVECT) && defined(USE_REGEXP)
+  : Application(5, MainFormForm),
+#elif defined(VARVECT) || defined(USE_REGEXP)
+  : Application(4, MainFormForm),
+#else
+  : Application(3, MainFormForm),
+#endif
     mainform(),
     wordform(),
-    variableform()
+#ifdef USE_REGEXP
+    REform(),
+    consultformID(MainFormForm),
+#endif
+#ifdef VARVECT
+    variableform(),
+#endif
+    dictform()
 {
+#ifdef VARVECT
+    vars = new VariableSet();
 //    MemSetDebugMode(memDebugModeCheckOnAll);
-    /*mainform.*/Restore();
+#endif
+    RestoreSettings();
 }
 
-Form *PalmWordApplication::GetForm(UInt formID)
+void WordFindApplication::SaveSettings()
 {
-    switch (formID)
+    Database config;
+    MemHandle h = 0;
+    int x = CFGSZ;
+    x = x*4;
+    x = x/2;
+    if (config.OpenByType(ConfigDBType, dmModeReadWrite, "pwcfg") == True)
+	h = config.GetRecord(0);
+    if (h == 0)
+	h = config.NewRecord(0, (UInt16)x/2/*CFGSZ*/);
+    else if (MemHandleSize(h) != CFGSZ)
+        h = config.Resize(0, CFGSZ);
+    if (h)
     {
-    case MainFormForm:
-        return &mainform;
-    case WordFormForm:
-	return &wordform;
-    case VariableFormForm:
-	return &variableform;
+	unsigned char *lpbuf = (unsigned char *)MemPtrNew(CFGSZ);
+	unsigned char *dp = (unsigned char*)MemHandleLock(h);
+	if (lpbuf && dp)
+	{
+	    unsigned char *lp = lpbuf;
+	    mainform.Save(lp);
+#ifdef USE_REGEXP
+	    REform.Save(lp);
+	    *((UInt16*)lp)++ = consultformID;
+#endif
+
+	    // still to do - WordForm stack context
+	    config.Write(dp, lpbuf, CFGSZ); 
+	}
+        MemHandleUnlock(h);
+        if (lpbuf) MemPtrFree(lpbuf);
+	config.ReleaseRecord(0);
+	config.Close();
     }
-    return 0;
 }
 
-Form *PalmWordApplication::TopForm()
+void WordFindApplication::RestoreSettings()
 {
-    return &mainform;
+    Database config;
+    if (config.OpenByType(ConfigDBType) == True)
+    {
+        MemHandle h = config.QueryRecord(0);
+        if (h)
+        {
+	    unsigned char *lp = (unsigned char*)MemHandleLock(h);
+	    if (lp && MemHandleSize(h) >= CFGSZ)
+	    {
+	        mainform.Restore(lp);
+#ifdef USE_REGEXP
+		REform.Restore(lp);
+		consultformID = startformID = *((UInt16*)lp)++;
+#endif
+	    }
+	    MemHandleUnlock(h);
+	}
+	config.Close();
+    }
 }
 
-void PalmWordApplication::Stop()
+void WordFindApplication::Stop()
 {
-    /*mainform.*/Save();
+    if (activeform == &mainform)
+        mainform.SavePattern();
+#ifdef USE_REGEXP
+    else if (activeform == &REform)
+        REform.SavePattern();
+#endif
+    SaveSettings();
+#ifdef VARVECT
+    delete vars;
+    vars = 0;
+#endif
     Application::Stop();
 }
 
-DWord RunApplication(Word cmd, Ptr cmdPBP, Word launchflags)
+//------------------------------------------------------------------------
+
+UInt32 RunApplication(MemPtr cmdPBP, UInt16 launchflags)
 {
-    history.Init();
-    vars.Init();
-    dict.Init();
-    PalmWordApplication app;
-    return app.Main(cmd, cmdPBP, launchflags);
+    UInt32 rtn = 0;
+    // dict must be created before the application is, so that it
+    // can be passed to the dictlist in main form
+#ifdef VARVECT
+    vars = 0;
+#endif
+    dict = new WordFindDict();
+    if (dict)
+    {
+        dict->InitDB();
+        WordFindApplication *app = new WordFindApplication();
+	rtn = app->Main(cmdPBP, launchflags);
+	delete app;
+	delete dict;
+	dict = 0;
+    }
+    return rtn;
 }
 
 #endif // IS_FOR_PALM
 #endif // !UNIX
 
-
