@@ -1,0 +1,171 @@
+<!doctype html public "-//w3c//dtd html 4.0 transitional//en">
+<html>
+<head>
+   <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1">
+   <meta name="Author" content="Graham Wheeler">
+   <meta name="GENERATOR" content="Mozilla/4.75 [en] (Win95; U) [Netscape]">
+   <title>manual</title>
+</head>
+<body>
+
+<center><b><font size=+3>WordFindLite</font></b>
+<br><font size=+2>by Graham Wheeler</font>
+<br><i>gramster@bigfoot.com</i></center>
+
+<p><br>
+<br>
+<br>
+<p><b><font size=+2>0. Release Information</font></b>
+<p>This document describes WordFindLite v2.7.&nbsp; WordFindLite v1.1 uses
+the same underlying search engine as WordFind++ v2.7.
+<br>&nbsp;
+<p><b><font size=+2>1. Introduction</font></b>
+<p>WordFindLite is a fast and powerful dictionary searching program for
+use with word games like Scrabble and for crosswords, and codewords/cryptograms.
+You can use it to generate lists of anagrams or to find word matches given
+a subset of known letters.
+<p>WordFindLite is a simplified version of the WordFind++ and WordFindPro
+programs. It does not support the advanced features of these programs,
+but has a simpler interface which makes it easier to use for the casual
+user. It also does not have as many dictionary databases as the other programs,
+nor include the dictionary builder (that comes with WordFindPro only).
+<p>To use WordFindLite, you must also install one of the dictionary databases
+it comes with for it to search.
+<p>The currently available dictionaries are:
+<p><b>demo.pdb</b> - the dictionary that comes with the trial versions
+of WordFindLite, WordFind++ and WordFindPro, this has 30,240 words, of
+up to 9 letters in length.
+<p><b>ospd3.pdb</b> - for Scrabble players, this dictionary is made from
+the OSPD3 word list of&nbsp; 116,887 words of up to 13 characters in length.
+<p><b>small.pdb</b> - a crossword dictionary of 52,033 common words.
+<p><b>medium.pdb</b> - a medium sized crossword dictionary of 133,426 words.
+<p>The trial versions may be used with the <b>demo.pdb</b> dictionary only.
+Unauthorised redistribution of the other dictionary database files is not
+permitted.
+<br>&nbsp;
+<p><b><font size=+2>2. Using WordFindLite</font></b>
+<p><b><font size=+1>General Crossword Help</font></b>
+<p>For help with a crossword word, where only some letters are known:
+<ul>
+<li>
+make sure the button at the bottom right is set to "Anchored"</li>
+
+<li>
+enter the word or words in the Template field. For positions where the
+letter is unknown, press the "?" button. For multi-word clues, use the
+"|" button to indicate word breaks.</li>
+
+<li>
+tap on the "Go!" button to start the search</li>
+</ul>
+For example, if you have a four letter clue with word lengths 2,4,2,4 and
+you know the first letter of each word, you would enter the pattern "A?|G???|A?|G???".
+<p>(In this case, the cryptic clue is "Behaviour deserving top trophy",
+and the answer is "As good as gold").
+<p><b><font size=+1>Finding Anagrams</font></b>
+<p>To find anagrams, you need to enter the letters in the Anagram field.
+For multi-word anagrams, use the "|" character as before to mark specific
+positions as word breaks (as in a crossword anagram clue). For example,
+if you had a crossword clue "Wicked television arrangement (4,3,3)" which
+you guessed was an anagram of "television", you could enter "tele|vis|ion"
+to find all possible matches. (The answer, in this case, is "evil ion set").
+<p><b><font size=+1>The User Interface</font></b>
+<p>The Main Form in WordFindLite looks like:
+<p><img SRC="mainlite.jpg" height=160 width=160 align=ABSCENTER>
+<p>There is a keyboard that you can use to enter letters, shortcut buttons
+for the unknown letter indicator `?' and word separator `|', the `Go' button
+to start a search, `Clear' buttons to clear the current pattern, and two
+fields for entering patterns, one for template patterns and one for anagram
+patterns.
+<p>After pressing Go! in the Main Form, WordFindLite will display the matches
+found in the Word Form, shown below.
+<p><img SRC="wordlite.jpg" height=160 width=160 align=ABSCENTER>&nbsp;
+The Word Form, displaying the partial results of a pattern search.
+<p>The controls in the Word Form are:
+<ul>
+<li>
+Next - show the next screenfull of matches</li>
+
+<li>
+Redo - start displaying the matches again from the first screen</li>
+
+<li>
+New - go back to the Main Form to start a new search</li>
+
+<br>Stop! - while WordFindLite is busy searching for matches, you can press
+this button to abort the search.</ul>
+Note that the words shown are broken at the third character position, rather
+than at the the fourth position, while the search pattern is broken at
+the fourth position. This is due to a subtle difference between the anagram
+and template style searches. If you insert word breaks in the anagram field,
+this tells WordFindLite the lengths of the allowable matches, but does
+not enforce the position of the break. That is, the anagram search pattern
+"teac|her" tells WordFindLite to find two-word anagrams of the letters
+"teacher" where one word is four letters long and the other is three letters
+long.
+<p>Entering a word break in the template field, however, fixes its position.
+You can combine the two. For example, if you entered "????|???" in the
+template field, and "teacher" in the anagram field, then WordFindLite would
+find two-word anagrams of "teacher" where the first word is four letters
+long and the second word is three letters long.
+<p><b><font size=+2>3. Registration</font></b>
+<p>WordFindLite is shareware, and cost US$8. The trial version can be used
+with the demo.pdb dictionary for 21 days for evaluation purposes. If you
+continue to use the program after that, you must pay for it. The full version
+can be purchased and downloaded from PalmGear Headquarters at http://www.palmgear.com.
+Registered users get access to other dictionaries, to future updates, and
+to e-mail support.
+<p>Before purchasing WordFindLite, I recommend that you try WordFind++
+and WordFindPro. They offer considerably more powerful search types, although
+they are somewhat more complicated to use. You may find that they suit
+your requirements better. WordFindLite has been designed to support the
+most common types of word searches, with the simplest possible interface.
+WordFind++ supports much more powerful searches, but has a more complex
+interface. WordFindPro supports even more types of searches, such as cryptogram
+style searches (using numbers in place of letters), and UNIX regular-expression
+style searches. It also allows you to search more than one dictionary,
+and includes an MS-Windows program for creating your own dictionaries.
+<br>&nbsp;
+<p><b><font size=+2>4. Disclaimer</font></b>
+<p>While every endeavour has been made to eliminate bugs in this software,
+the software is provided "as is", and the author makes no warranties as
+to its fitness for any purpose, nor shall the author be held responsible
+for any data loss incurred as a result of the use of this software.
+<br>&nbsp;
+<p><b><font size=+2>5. Known Bugs/Limitations/Common Problems</font></b>
+<p>There are no known bugs in this release.
+<p>There are some limitations. Search patterns are restricted to 63 characters,
+while words are restricted to 31.
+<p>From questions I get asked by e-mail, I think I should just stress one
+point:
+<p>You must load a dictionary .pdb file or WordFindLite will just show
+a "No dictionary!" error when you try to search.
+<br>&nbsp;
+<p><b><font size=+2>6. Version History</font></b>
+<p>Changed the name from PalmWordLite to WordFindLite to avoid trademark
+and copyright issues with Palm, Inc.
+<p>Release 1.1 is built using an updated C++ application framework library.
+This framework will be described in an article in Dr Dobbs Journal in late
+2001, for those who are interested. There are very few functional changes,
+except that previously WordFindLite would report a `no dictionary loaded'
+error in response to an invalid search pattern; this has been corrected
+and it will now distinguish between being unable to perform a search due
+to the absence of a dictionary, and being unable to perform a search due
+to an error in the search expression.
+<p>Release 1.1 is built using PalmOS SDK 3.5 and requires PalmOS 3.1 at
+the minimum.
+<p>
+Release 2.7 followed 1.1; the big jump was to synchronise version numbers 
+between WordFind++ and WordFindLite. This release was rebuilt using the 
+updated WordFind++ engine, and also fixed some problems with the dictionaries
+that were included with 1.1.
+<br>&nbsp;
+<p><b><font size=+2>7. Contacting the Author</font></b>
+<p>I am always interested to hear bug reports, feature requests, and of
+novel uses the WordFind range of programs (such as using them to solve
+puzzles in computer adventure games, substitution ciphers, and so on. Please
+mail any comments to <i>gramster@bigfoot.com</i>
+<p><i>Enjoy using WordFindLite!</i>
+<br>&nbsp;
+</body>
+</html>

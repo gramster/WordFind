@@ -1,0 +1,803 @@
+<!doctype html public "-//w3c//dtd html 4.0 transitional//en">
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+xmlns:w="urn:schemas-microsoft-com:office:word"
+xmlns="http://www.w3.org/TR/REC-html40">
+
+<head>
+<meta http-equiv=Content-Type content="text/html; charset=iso-8859-1">
+<meta name=ProgId content=Word.Document>
+<meta name=Generator content="Microsoft Word 10">
+<meta name=Originator content="Microsoft Word 10">
+<link rel=File-List href="ddj_files/filelist.xml">
+<title>ddj</title>
+<!--[if gte mso 9]><xml>
+ <o:DocumentProperties>
+  <o:Author>gram</o:Author>
+  <o:Template>Normal</o:Template>
+  <o:LastAuthor>gram</o:LastAuthor>
+  <o:Revision>2</o:Revision>
+  <o:TotalTime>46</o:TotalTime>
+  <o:Created>2002-07-02T06:14:00Z</o:Created>
+  <o:LastSaved>2002-07-02T07:00:00Z</o:LastSaved>
+  <o:Pages>1</o:Pages>
+  <o:Words>4744</o:Words>
+  <o:Characters>27043</o:Characters>
+  <o:Company>Microsoft Corporation</o:Company>
+  <o:Lines>225</o:Lines>
+  <o:Paragraphs>63</o:Paragraphs>
+  <o:CharactersWithSpaces>31724</o:CharactersWithSpaces>
+  <o:Version>10.3501</o:Version>
+ </o:DocumentProperties>
+</xml><![endif]--><!--[if gte mso 9]><xml>
+ <w:WordDocument>
+  <w:SpellingState>Clean</w:SpellingState>
+  <w:GrammarState>Clean</w:GrammarState>
+  <w:BrowserLevel>MicrosoftInternetExplorer4</w:BrowserLevel>
+ </w:WordDocument>
+</xml><![endif]-->
+<style>
+<!--
+ /* Font Definitions */
+ @font-face
+	{font-family:Wingdings;
+	panose-1:5 0 0 0 0 0 0 0 0 0;
+	mso-font-charset:2;
+	mso-generic-font-family:auto;
+	mso-font-pitch:variable;
+	mso-font-signature:0 268435456 0 0 -2147483648 0;}
+ /* Style Definitions */
+ p.MsoNormal, li.MsoNormal, div.MsoNormal
+	{mso-style-parent:"";
+	margin:0in;
+	margin-bottom:.0001pt;
+	mso-pagination:widow-orphan;
+	font-size:12.0pt;
+	font-family:"Times New Roman";
+	mso-fareast-font-family:"Times New Roman";}
+h1
+	{mso-margin-top-alt:auto;
+	margin-right:0in;
+	mso-margin-bottom-alt:auto;
+	margin-left:0in;
+	mso-pagination:widow-orphan;
+	mso-outline-level:1;
+	font-size:24.0pt;
+	font-family:"Times New Roman";
+	font-weight:bold;}
+p
+	{mso-margin-top-alt:auto;
+	margin-right:0in;
+	mso-margin-bottom-alt:auto;
+	margin-left:0in;
+	mso-pagination:widow-orphan;
+	font-size:12.0pt;
+	font-family:"Times New Roman";
+	mso-fareast-font-family:"Times New Roman";}
+span.SpellE
+	{mso-style-name:"";
+	mso-spl-e:yes;}
+span.GramE
+	{mso-style-name:"";
+	mso-gram-e:yes;}
+@page Section1
+	{size:8.5in 11.0in;
+	margin:1.0in 1.25in 1.0in 1.25in;
+	mso-header-margin:.5in;
+	mso-footer-margin:.5in;
+	mso-paper-source:0;}
+div.Section1
+	{page:Section1;}
+ /* List Definitions */
+ @list l0
+	{mso-list-id:1009143395;
+	mso-list-type:hybrid;
+	mso-list-template-ids:410048302 67698689 67698691 67698693 67698689 67698691 67698693 67698689 67698691 67698693;}
+@list l0:level1
+	{mso-level-number-format:bullet;
+	mso-level-text:\F0B7;
+	mso-level-tab-stop:.5in;
+	mso-level-number-position:left;
+	text-indent:-.25in;
+	font-family:Symbol;}
+ol
+	{margin-bottom:0in;}
+ul
+	{margin-bottom:0in;}
+-->
+</style>
+<!--[if gte mso 10]>
+<style>
+ /* Style Definitions */
+ table.MsoNormalTable
+	{mso-style-name:"Table Normal";
+	mso-tstyle-rowband-size:0;
+	mso-tstyle-colband-size:0;
+	mso-style-noshow:yes;
+	mso-style-parent:"";
+	mso-padding-alt:0in 5.4pt 0in 5.4pt;
+	mso-para-margin:0in;
+	mso-para-margin-bottom:.0001pt;
+	mso-pagination:widow-orphan;
+	font-size:10.0pt;
+	font-family:"Times New Roman";}
+</style>
+<![endif]-->
+<meta name=Author content="Graham Wheeler">
+</head>
+
+<body lang=EN-US style='tab-interval:.5in'>
+
+<div class=Section1>
+
+<h1>A Lightweight C++ Application Framework for <span class=SpellE>PalmOS</span></h1>
+
+<p class=MsoNormal><span class=GramE><i><span style='font-size:13.5pt'>by</span></i></span><i><span
+style='font-size:13.5pt'> Graham Wheeler</span></i> </p>
+
+<p>This article describes my experiences with writing C++ applications under <span
+class=SpellE>PalmOS</span>, and the lightweight application framework which I
+developed in order to make this task easier. </p>
+
+<p>I bought my Palm III in May 1999, not for its built-in applications, but
+because I wanted to port parts of <span class=SpellE>XWord</span>, my
+MS-Windows-based crossword assistant program over to a mobile device that I
+could have with me at all times. A big factor in my decision to buy a Palm
+device rather than an EPOC or WinCE device was the fact that there were free
+C++ development tools available, in the form of <span class=SpellE>gcc</span>
+for <span class=SpellE>PalmOS</span>. At the time, I had been programming in
+C++ for about six years, and was hoping to do the same with my Palm. </p>
+
+<p>I quickly discovered that I was on my own. The Palm SDK was aimed squarely
+at C programmers, not C++ programmers, and judging by comments in the various
+newsgroups, programming in C++ on the Palm was considered impractical. Further
+searching led me to discover <span class=SpellE>TeeNee</span>, a C++
+application framework which did seem to overcome this apparent limitation.
+However, <span class=SpellE>TeeNee</span> was way too overblown for my liking.
+I wanted something that was lightweight, easy to understand and extend, and yet
+gave me the benefits of C++ classes, especially inheritance. So I decided to
+write my own lightweight application framework. </p>
+
+<p>This proved to be trickier than I anticipated. There are a number of
+pitfalls when programming the Palm, and some of these are exacerbated by the
+use of C++. For example, no global variables can be initialized before certain
+checks are performed. This meant that I could not allow any global class
+instances (although I could have global pointers to classes, provided these
+were not statically initialized). </p>
+
+<p>More precisely, a Palm application can be invoked under a number of
+conditions, most of which do not cause it to display its user interface. For
+example, using the Palm's Find facility causes each application to be invoked
+with special flags telling it that it should search its databases for a
+particular string. An application that chooses to respond to this will not have
+its user interface instantiated - in fact, it will not have its data segment
+instantiated. This is done to save both memory and CPU time. So, if an
+application is going to support the Find facility, it cannot use global
+variables. More significantly, for C++ programmers, the application cannot make
+use of any abstract classes, as the <span class=SpellE>vtbl</span> of method
+pointers for such classes needs to reside in the data segment. </p>
+
+<p>Another problem is the limited space available for the stack - only 2 kb.
+This was a particular problem for me as the algorithms I wanted to use were
+highly recursive. It is very easy to quickly use up all the stack space, either
+through recursion, too deep a level of function call nesting, careless use of
+parameters in function or method calls, or classes allocated on the stack that
+make use of too much storage for member variables. This meant that class
+members needed to be dynamically allocated (which is undesirable, due to the
+need to use memory handles and to lock/unlock them), or the class instances
+themselves should be dynamically allocated wherever possible. I decided on the
+latter approach. Another trick which runs counter to normal programming style
+is to use member variables<span class=GramE>&nbsp; to</span> help reduce the
+number of parameters passed on the stack during method invocations. </p>
+
+<p>Yet another hurdle was the event-driven nature of Palm programs. C++ is
+great for writing event-driven systems, but not that great for writing wrappers
+around a C-based event-driven model. Event handlers typically need to be static
+methods, if they are to be class members. Then there is the problem that these
+event handlers are passed numeric identifiers specifying the associated user
+interface objects. Somehow these identifiers have to be translated into objects
+that exist in the C++ wrapper space. Usually this is done by registering pointers
+to every C++ class instance in some data structure like a linked list, and then
+searching this list for the associated object. This can quickly add code bloat,
+drain scarce memory resources, and add unacceptable performance hits to the
+program. Both time and space resources are precious commodities in Palm
+programs. To make things even more complicated, <span class=SpellE>PalmOS</span>
+event handlers are sometimes not even passed the resource ID of the associated
+object, let alone the resource ID of the form that contains the object. It is
+expected, for example, that every list object will have its own static event
+handler function, and that the list is therefore implicitly identified by the
+handler function that is called. </p>
+
+<p>Last but not least, many of the <span class=SpellE>PalmOS</span> API calls
+do not handle error conditions very well. While some do return error codes,
+many will simply display a fatal error on the screen, followed by a device
+reset. Almost any bad parameter that would result in an error condition (such
+as attempting to retrieve a nonexistent record from a database) causes this at
+best, and causes a crash with no error indication at worst. This is hardly an
+acceptable approach to error handling, and I wanted my wrappers to be much more
+robust. Although this caused much pain and suffering, it was an area in which I
+knew my C++ framework would pay for itself in the end, even if I derived no
+other benefits. </p>
+
+<p>These factors led me to take several design decisions which are reflected in
+the eventual code: </p>
+
+<p style='margin-left:.5in;text-indent:-.25in;mso-list:l0 level1 lfo1;
+tab-stops:list .5in'><![if !supportLists]><span style='font-family:Symbol;
+mso-fareast-font-family:Symbol;mso-bidi-font-family:Symbol'><span
+style='mso-list:Ignore'>·<span style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+</span></span></span><![endif]>To avoid unnecessary complexity, simple user
+interface objects like buttons are dealt with natively, and not encapsulated in
+classes. This helps keep the framework small in terms of number of classes, and
+simplifies event handling as in most cases I simply need to identify the form
+class instance that owns the user interface object tied to the event, and then
+use native API code from that point. I use class wrappers only for items of
+reasonable complexity (such as <i style='mso-bidi-font-style:normal'>Field</i>s,
+<i style='mso-bidi-font-style:normal'>List</i>s, <i style='mso-bidi-font-style:
+normal'>Form</i>s and <i style='mso-bidi-font-style:normal'>Database</i>s). </p>
+
+<p style='margin-left:.5in;text-indent:-.25in;mso-list:l0 level1 lfo1;
+tab-stops:list .5in'><![if !supportLists]><span style='font-family:Symbol;
+mso-fareast-font-family:Symbol;mso-bidi-font-family:Symbol'><span
+style='mso-list:Ignore'>·<span style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+</span></span></span><![endif]>The <i style='mso-bidi-font-style:normal'>Application</i>
+class is allocated dynamically. As this class owns the various <i
+style='mso-bidi-font-style:normal'>Form</i> classes, which in turn own the
+various <i style='mso-bidi-font-style:normal'>Field</i> and <i
+style='mso-bidi-font-style:normal'>List</i> classes, these other classes can be
+allocated either statically as member variables or dynamically, depending on
+the users preference - statically allocated <i style='mso-bidi-font-style:normal'>Form</i>s,
+<i style='mso-bidi-font-style:normal'>Field</i>s and <i style='mso-bidi-font-style:
+normal'>List</i>s will still reside in the heap as they are contained within
+the <i style='mso-bidi-font-style:normal'>Application</i> instance. </p>
+
+<p style='margin-left:.5in;text-indent:-.25in;mso-list:l0 level1 lfo1;
+tab-stops:list .5in'><![if !supportLists]><span style='font-family:Symbol;
+mso-fareast-font-family:Symbol;mso-bidi-font-family:Symbol'><span
+style='mso-list:Ignore'>·<span style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+</span></span></span><![endif]>Classes are not cluttered with lots of the usual
+standard methods such as copy constructors and the like. The strict memory
+constraints mean that class instances should be used with care and not copied
+if at all possible. </p>
+
+<p style='margin-left:.5in;text-indent:-.25in;mso-list:l0 level1 lfo1;
+tab-stops:list .5in'><![if !supportLists]><span style='font-family:Symbol;
+mso-fareast-font-family:Symbol;mso-bidi-font-family:Symbol'><span
+style='mso-list:Ignore'>·<span style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+</span></span></span><![endif]>To reduce the amount of mixing of native API
+code with framework code, and to add robustness to many of the calls to native
+API functions, many API calls are wrapped in one line inline methods, protected
+by sanity checks on the parameters. Some of these sanity checks can be
+conditionally removed for production code to reduce code size. </p>
+
+<p style='margin-left:.5in;text-indent:-.25in;mso-list:l0 level1 lfo1;
+tab-stops:list .5in'><![if !supportLists]><span style='font-family:Symbol;
+mso-fareast-font-family:Symbol;mso-bidi-font-family:Symbol'><span
+style='mso-list:Ignore'>·<span style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+</span></span></span><![endif]>To simplify creating separate static event
+handler functions for each <i style='mso-bidi-font-style:normal'>List</i>
+subclass, a preprocessor macro is used. </p>
+
+<p style='margin-left:.5in;text-indent:-.25in;mso-list:l0 level1 lfo1;
+tab-stops:list .5in'><![if !supportLists]><span style='font-family:Symbol;
+mso-fareast-font-family:Symbol;mso-bidi-font-family:Symbol'><span
+style='mso-list:Ignore'>·<span style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+</span></span></span><![endif]>The form event handler is a static function,
+which obtains a pointer to the <i style='mso-bidi-font-style:normal'>Form</i>
+instance that is currently active, and then calls an appropriate virtual method
+for handling the specific event type. Users of the framework can then define
+their own <i style='mso-bidi-font-style:normal'>Form</i> subclasses and only
+need to (re)define those event handlers that they actually require. </p>
+
+<p style='margin-left:.5in;text-indent:-.25in;mso-list:l0 level1 lfo1;
+tab-stops:list .5in'><![if !supportLists]><span style='font-family:Symbol;
+mso-fareast-font-family:Symbol;mso-bidi-font-family:Symbol'><span
+style='mso-list:Ignore'>·<span style='font:7.0pt "Times New Roman"'>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+</span></span></span><![endif]>While user interface classes can and do make use
+of virtual methods, the <i style='mso-bidi-font-style:normal'>Database</i>
+class does not, so that it can be used even when the data segment has not been
+initialized (provided any <i style='mso-bidi-font-style:normal'>Database</i>
+class instances are allocated only on the stack in this case). </p>
+
+<p>The framework compiles with both CodeWarrior and with <span class=SpellE>gcc</span>.
+I use CodeWarrior for my development; I like the integrated environment and I
+find it produces smaller executables (for example, the scorekeeper program I
+describe later compiles to 18kb with CodeWarrior but to 27kb with <span
+class=SpellE>gcc</span>). The example program in this article was developed
+using CodeWarrior, but I have used the resource header file generated by
+CodeWarrior to create a resource file suitable for <span class=SpellE>pilrc</span>,
+and also given a <span class=SpellE>Makefile</span>, so that you can compile
+the program using <span class=SpellE>gcc</span>, as it is easier to show these
+files because they are all plain text. </p>
+
+<p><b>The Framework Code</b> </p>
+
+<p>Turning to the code, Listing 1 shows the class header declaration for the <i
+style='mso-bidi-font-style:normal'>Database</i> class. This is a good class to
+start with as it is independent of user interface concerns. Each database has a
+location in memory where the header information is stored; this location is
+represented by a memory card number (usually zero except in devices with
+expansion memory), and a `local ID', which is the relative offset of the header
+in the memory card. These two pieces of information uniquely specify a
+particular database, but in a low-level fashion. A more useful, higher level
+way of identifying a database, is by the creator ID and the `type'. Creator
+IDs, which are used for both databases and applications, are assigned by Palm,
+Inc - if you are going to develop Palm applications you should register a
+creator ID for each application at the Palm, Inc website. The type is a 32-bit
+identifier of your own choosing, which serves to distinguish different database
+types within the same application. Be aware that the creator ID and type are
+not enough to uniquely identify a database - there may be more than one
+database resident with the same creator ID and type. </p>
+
+<p>You can ask <span class=SpellE>PalmOS</span> to open a database given the
+card number and local ID (unambiguous), or given the creator ID and type
+(potentially ambiguous). In the latter case, <span class=SpellE>PalmOS</span>
+will open the most recently revised database that has a matching creator ID and
+type. Alternatively, you can iterate through the list of matching databases and
+obtain additional information, such as a revision number and name, as well as
+the card number and local ID. The revision number and name may help you to
+identify which of the matches you are interested in, and you can then use the
+card number and local ID to open that specific matching database. It is
+therefore good policy to either use unique types for each database, or unique
+names for each database of a specific type. The code is extensively commented,
+and you should read the comments before using it. </p>
+
+<p>Having dealt with databases, we can turn to the components of the user
+interface. As mentioned earlier, for many of the simpler components, such as
+text labels, checkboxes, and so on, there is little need to turn these
+components into full-blown classes. Not much would be gained by doing so, and
+much would be lost (in the form of precious memory). For these types of
+components, simple member functions within the <i style='mso-bidi-font-style:
+normal'>Form</i> class will suffice. For example, the <i style='mso-bidi-font-style:
+normal'>Form</i> class has methods for testing and setting the state of
+checkbox components given their resource IDs. There are also more general
+methods for enabling and disabling the components (when disabled, tapping on
+the component will do nothing). The set of methods for handling such components
+is by no means exhaustive, but covers all of the requirements I have had in my
+own programs so far, and more can easily be added as needed - in many cases
+these are simply invocations of corresponding <span class=SpellE>PalmOS</span>
+API functions, with some additional sanity checking of parameters. </p>
+
+<p>For more complex user interface components, such as lists and fields, it is
+worth creating separate classes. These components have some things in common.
+For example, each has a unique resource ID for identification. Each also may
+require some initialization when the parent form is activated. For example, a
+dynamic list will need to have an event handler set up to draw items in the
+list, while a field may need to be initialized with some text. It makes sense
+then to have a virtual method to activate the component. </p>
+
+<p>To simplify the handling of these components, and make it easier to add new
+self-contained components in the future, these common attributes can be
+separated out into a parent <i style='mso-bidi-font-style:normal'>Widget</i>
+class. The Widget class can store the type and resource ID of the component, as
+well as define the virtual <i style='mso-bidi-font-style:normal'>Activate</i>
+method. Other methods could also be added, such as methods to enable or disable
+the component, although in my framework I have not done this but rely on the
+more generic methods in the <i style='mso-bidi-font-style:normal'>Form</i>
+class for component enabling and disabling. </p>
+
+<p>Once we have a <i style='mso-bidi-font-style:normal'>Widget</i> class, we
+then need to give each <i style='mso-bidi-font-style:normal'>Form</i> instance
+a collection of <i style='mso-bidi-font-style:normal'>Widget</i>s. I initially
+used a linked list for this, but later simplified this to a dynamically allocated
+array of <i style='mso-bidi-font-style:normal'>Widget</i> pointers. When the <i
+style='mso-bidi-font-style:normal'>Form</i> class is instantiated, I pass the
+number of <i style='mso-bidi-font-style:normal'>Widget</i>s through in the
+constructor. In my applications, as in most Palm applications, the set of <i
+style='mso-bidi-font-style:normal'>Widget</i>s belonging to a <i
+style='mso-bidi-font-style:normal'>Form</i> is static, and so the number of <i
+style='mso-bidi-font-style:normal'>Widget</i>s is known ahead of time. </p>
+
+<p>Having a set of <i style='mso-bidi-font-style:normal'>Widget</i>s simplifies
+numerous tasks that must be handled by a <i style='mso-bidi-font-style:normal'>Form</i>,
+and allows them to be handled in a generic way by the <i style='mso-bidi-font-style:
+normal'>Form</i> class, so that derived <i style='mso-bidi-font-style:normal'>Form</i>
+classes no longer need to worry about them. These tasks include activating the <i
+style='mso-bidi-font-style:normal'>Widget</i> when the parent <i
+style='mso-bidi-font-style:normal'>Form</i> is activated, identifying a <i
+style='mso-bidi-font-style:normal'>Widget</i> that gets an event (for example
+when the <i style='mso-bidi-font-style:normal'>Widget</i> gets a stylus tap),
+calling the associated event handler method in the <i style='mso-bidi-font-style:
+normal'>Widget</i>, and so on. The parent <i style='mso-bidi-font-style:normal'>Form</i>
+can simply iterate through the array of <i style='mso-bidi-font-style:normal'>Widgets</i>
+looking for one with the appropriate type and resource ID and hand off the task.
+</p>
+
+<p>This leaves one problem - how to set up the array of <i style='mso-bidi-font-style:
+normal'>Widget</i>s in the first place. The <i style='mso-bidi-font-style:normal'>Form</i>
+base class does not have any knowledge of the member <i style='mso-bidi-font-style:
+normal'>Widget</i>s that a derived class <span class=GramE>defines,</span> so
+although it can allocate space for the <i style='mso-bidi-font-style:normal'>Widget</i>
+pointers in its <span class=SpellE>contructor</span>, it cannot initialize
+these pointers itself. Having to explicitly call a method for each <i
+style='mso-bidi-font-style:normal'>Widget</i> in a derived <i style='mso-bidi-font-style:
+normal'>Form</i> to add it to the array is also a bit messy and causes some
+code bloat. The solution I chose was to have the <i style='mso-bidi-font-style:
+normal'>Widget</i> constructor take a pointer to the parent <i
+style='mso-bidi-font-style:normal'>Form</i> as a parameter, and then call a
+method in the <i style='mso-bidi-font-style:normal'>Form</i> to add itself to
+the <i style='mso-bidi-font-style:normal'>Form</i>'s array. Then, any derived <i
+style='mso-bidi-font-style:normal'>Form</i> instances should simply pass <b>this</b>
+as a parameter to the constructors of their member components (the resource ID
+of the specific component is also passed as a parameter to these constructors).
+This way, most of the work can be done in a generic way by the <i>Form</i> and <i>Widget</i>
+class.</p>
+
+<p>I will return to the rest of the details of the <i style='mso-bidi-font-style:
+normal'>Form</i> class shortly. First I want to discuss the details of the two
+classes that I derive from <i style='mso-bidi-font-style:normal'>Widget</i>s,
+namely <span class=GramE><i style='mso-bidi-font-style:normal'>List</i>s</span>
+and <i style='mso-bidi-font-style:normal'>Field</i>s. </p>
+
+<p><i style='mso-bidi-font-style:normal'>Field</i>s are actually very
+straightforward. In the <span class=SpellE>PalmOS</span> API, fields are
+referenced via pointers to structures; these pointers have type <span
+class=SpellE><i style='mso-bidi-font-style:normal'><span style='mso-bidi-font-weight:
+bold'>FieldPtr</span></i></span>. This is the only member variable that is
+needed by the <i style='mso-bidi-font-style:normal'>Field</i> class over and
+above the type and resource ID members that are already defined in the <i
+style='mso-bidi-font-style:normal'>Widget</i> class. Most of the member methods
+of the <i style='mso-bidi-font-style:normal'>Field</i> class are just wrappers
+for the equivalent <span class=SpellE>PalmOS</span> API functions that take the
+<span class=SpellE><i style='mso-bidi-font-style:normal'>FieldPtr</i></span> as
+the first argument; the class methods just add an optional check to ensure that
+the <span class=SpellE><i style='mso-bidi-font-style:normal'>FieldPtr</i></span>
+is not NULL. The non-inline methods may generate error dialogs if this check
+fails. The only methods of much note in the <i style='mso-bidi-font-style:normal'>Field</i>
+class are the ones relating to the clipboard for selecting text, and
+cutting/copying/pasting. These will be used later in the <i style='mso-bidi-font-style:
+normal'>Form</i> class in a way that allows applications to obtain these
+features almost transparently via inheritance. </p>
+
+<p><i style='mso-bidi-font-style:normal'>List</i>s are more complex. There are
+two types of lists: static lists, in which the items in the list are statically
+defined in the program's resource database, and dynamic lists, in which they
+are determined at run-time. Dynamic lists in turn may have a fixed number of
+elements, or a dynamic number of elements. </p>
+
+<p>Static lists are fairly trivial - <span class=SpellE>PalmOS</span> handles
+the details of drawing the elements of such lists. Dynamic lists, on the other
+hand, are much more complex. There are two ways of handling dynamic lists. One
+is by passing an array of strings to a list function. This is fairly
+straightforward, but there are many instances where it is not suitable. The
+other approach is the most generic, and involves defining a list draw event
+handler function. This function is called by <span class=SpellE>PalmOS</span>
+when drawing the list, and is given the item number as well as the bounding
+rectangle for the item on the screen. The function is then responsible for
+drawing the appropriate item text at the appropriate location. </p>
+
+<p>Unfortunately, the list draw function is not passed the resource ID of the
+list! This means that every dynamic list must have its own draw function, which
+means we cannot declare the draw function as a static member of the <i
+style='mso-bidi-font-style:normal'>List</i> class; instead, every (leaf) class
+derived from <i style='mso-bidi-font-style:normal'>List</i> must declare its
+own draw function, and call the necessary <span class=SpellE>PalmOS</span>
+function to install the draw function as a handler for draw events. To make
+this somewhat less tedious, the framework defines a macro, LISTHANDLER, which
+can be used in each such class to declare both the static draw function and the
+virtual method to install this as the draw event handler. This macro takes a single
+argument which is the list resource ID. The generic draw function in turn
+invokes a member method of the <i style='mso-bidi-font-style:normal'>Application</i>
+class, and passes it the list resource ID. The <i style='mso-bidi-font-style:
+normal'>Application</i> can then identify the active <i style='mso-bidi-font-style:
+normal'>Form</i>, and tell it to handle the draw event of the specified list.
+The <i style='mso-bidi-font-style:normal'>Form</i> can then identify the <i
+style='mso-bidi-font-style:normal'>List</i> widget, and in turn finally call a
+generic handler in the <i style='mso-bidi-font-style:normal'>List</i> class to
+do the drawing. This may seem overly complex, but the aim is to hide most of
+the details within the framework and out of your own application code. The net
+result is that you simply need to invoke the macro in your derived <i
+style='mso-bidi-font-style:normal'>List</i> classes, and the rest of the
+details should be transparent to your code. </p>
+
+<p>What is missing in this picture is how the actual text to be drawn for a
+specific list item is to be determined. One approach would be to have all
+derived <i style='mso-bidi-font-style:normal'>List</i> classes define their own
+virtual methods to return the text. However, there are often similarities in
+the types of lists we may want to use in our applications. For example, it was
+mentioned earlier that there may be multiple databases with the same type and
+creator. So, one type of list could be a list of databases of a specific type
+and creator, allowing the user to select which database to use. Another common
+type of list would be a list of records in a database. Clearly, these different
+types of lists are fairly generic, something which can be exploited by the
+framework. </p>
+
+<p>The approach that I took was to separate the <i style='mso-bidi-font-style:
+normal'>List</i> class from the actual items in the <i style='mso-bidi-font-style:
+normal'>List</i>, by introducing a new class, a <span class=SpellE><i
+style='mso-bidi-font-style:normal'>ListSource</i></span>. Each dynamic list has
+a pointer member to a <span class=SpellE><i style='mso-bidi-font-style:normal'>ListSource</i></span>
+instance, which it can query to get a specific list element. This eliminates
+the need for each leaf class derived from a <i style='mso-bidi-font-style:normal'>List</i>
+to have its own virtual method to get the item text; instead, the code for this
+can be moved entirely into the <i style='mso-bidi-font-style:normal'>List</i>
+class itself. Furthermore, common types of <span class=SpellE><i
+style='mso-bidi-font-style:normal'>ListSource</i>s</span> can be added to the
+framework as required. The framework currently has three classes derived from <span
+class=SpellE><i style='mso-bidi-font-style:normal'>ListSource</i></span>. A <span
+class=SpellE><i style='mso-bidi-font-style:normal'>FixedListSource</i></span>
+is a list source that has a fixed number of items but whose actual text is only
+known at run-time.&nbsp; A <span class=SpellE><i style='mso-bidi-font-style:
+normal'>RecordListSource</i></span> is a list source that returns records from
+a database. A <span class=SpellE><i style='mso-bidi-font-style:normal'>DatabaseListSource</i></span>
+is a list of&nbsp;databases having a specific type and creator ID. </p>
+
+<p>To use these in applications, create a class derived from <i
+style='mso-bidi-font-style:normal'>List</i>, and declare an appropriate <span
+class=SpellE><i style='mso-bidi-font-style:normal'>ListSource</i></span>
+member. When the constructor of the derived <i style='mso-bidi-font-style:normal'>List</i>
+calls the constructor for the <i style='mso-bidi-font-style:normal'>List</i>
+class itself, it passes in a pointer to the <span class=SpellE><i
+style='mso-bidi-font-style:normal'>ListSource</i></span> as one of the parameters.
+This, together with an invocation of the LISTHANDLER macro, is all that is
+needed to set up a dynamic list (although in most cases the derived <i
+style='mso-bidi-font-style:normal'>List</i> will also declare a virtual <span
+class=SpellE><i style='mso-bidi-font-style:normal'>HandleSelect</i></span>
+method to handle list item selection events - without this the list is useful
+for display purposes only). </p>
+
+<p>This brings us back to the <i style='mso-bidi-font-style:normal'>Form</i>
+class. So far we have discussed the way that the <i style='mso-bidi-font-style:
+normal'>Form</i> handles its member <i style='mso-bidi-font-style:normal'>Widget</i>s,
+and provides simple wrapper functions for more elementary components. Besides
+these, a <i style='mso-bidi-font-style:normal'>Form</i> has a virtual <i
+style='mso-bidi-font-style:normal'>Activate</i> method that is called upon
+activation (and which in turn calls the <i style='mso-bidi-font-style:normal'>Activate</i>
+methods of all of its <i style='mso-bidi-font-style:normal'>Widget</i>s), and a
+number of methods for handling different types of <span class=SpellE>PalmOS</span>
+events. It also has a static <span class=SpellE><i style='mso-bidi-font-style:
+normal'>EventHandler</i></span> member function. This member function uses the
+event type to determine which virtual method to call for the specific type of
+event. If the event is one pertaining to a <i style='mso-bidi-font-style:normal'>List</i>
+or <i style='mso-bidi-font-style:normal'>Field</i>, the virtual method will
+search the <i style='mso-bidi-font-style:normal'>Widget</i> array for the
+corresponding <i style='mso-bidi-font-style:normal'>List</i> or <i
+style='mso-bidi-font-style:normal'>Field</i> component, and call a virtual
+method in the <i style='mso-bidi-font-style:normal'>List</i> or <i
+style='mso-bidi-font-style:normal'>Field</i> class for handling that event. In
+this way events are dispatched to the appropriate component where possible. </p>
+
+<p>The generic <i style='mso-bidi-font-style:normal'>Form</i> in most cases
+does nothing with events other than calling a handler specific to the event
+(and the generic handlers in turn do nothing). It is up to derived <i
+style='mso-bidi-font-style:normal'>Form</i>, <i style='mso-bidi-font-style:
+normal'>List</i> and <i style='mso-bidi-font-style:normal'>Field</i> classes to
+declare appropriate virtual methods to do the necessary handling of events that
+are important to the application. One exception is the handling of Menu events.
+Many <span class=SpellE>PalmOS</span> applications have a menu with entries for
+<span class=GramE>selecting,</span> cutting, copying and pasting text, as well
+as bringing up the graffiti help dialog and the keyboard entry dialog. This
+code is quite generic, and can be handled by the framework in many cases. </p>
+
+<p>The main complication is that the resource IDs used by the application for
+these menu items is not preordained. However, the menu is usually titled
+`Edit', and the menu items are usually titled `Select All', `Paste', etc. This
+means that with <span class=SpellE>CodeWarrior's</span> Constructor program,
+the resource IDs will be associated with preprocessor macros named `<span
+class=SpellE>EditSelectAll</span>', `<span class=SpellE>EditPaste</span>', and
+so on. Thus the Form class can reasonably assume these names in its menu
+handler. Just in case the names are incorrect, the handler protects each case
+with preprocessor #<span class=SpellE>ifdef</span> directives. </p>
+
+<p><i style='mso-bidi-font-style:normal'>Dialog</i>s are a special case of <i
+style='mso-bidi-font-style:normal'>Form</i>s. They are usually modal, which
+means they pop up, get used, and then get exited (typically via `OK' or
+`Cancel' buttons), at which point control returns to the previous <i
+style='mso-bidi-font-style:normal'>Form</i>. In the framework, <i
+style='mso-bidi-font-style:normal'>Dialog</i>s are <span class=SpellE>sublcasses</span>
+of the <i style='mso-bidi-font-style:normal'>Form</i> class, which add a <i
+style='mso-bidi-font-style:normal'>Run</i> method. This method pops up the <i
+style='mso-bidi-font-style:normal'>Dialog</i>, and returns when the <i
+style='mso-bidi-font-style:normal'>Dialog</i> is exited. It returns the
+resource ID of the button that caused the <i style='mso-bidi-font-style:normal'>Dialog</i>
+to exit. <i style='mso-bidi-font-style:normal'>Dialog</i> subclasses can have
+their own virtual method event handlers just like <i style='mso-bidi-font-style:
+normal'>Form</i>s; however, unlike <i style='mso-bidi-font-style:normal'>Form</i>s,
+they do not get open and close events (although they do get activate events). </p>
+
+<p>Finally, we get to the <i style='mso-bidi-font-style:normal'>Application</i>
+class. Your own programs should subclass this class. The <i style='mso-bidi-font-style:
+normal'>Application</i> class is a singleton class - that is, only one instance
+of an <i style='mso-bidi-font-style:normal'>Application</i> is allowed. This is
+so that static functions like event handlers that are invoked from <span
+class=SpellE>PalmOS</span> can access the application class easily. The main
+functions of the application class are performing any necessary initialization
+and cleanup, checking for ROM version compatibility, and dispatching events to
+the appropriate Form class instances. </p>
+
+<p>&nbsp;In order to do the latter, the <i style='mso-bidi-font-style:normal'>Application</i>
+class handles <i style='mso-bidi-font-style:normal'>Form</i>s much like the <i
+style='mso-bidi-font-style:normal'>Form</i> class handles <i style='mso-bidi-font-style:
+normal'>Widget</i>s. It has a dynamically allocated array of pointers to <i
+style='mso-bidi-font-style:normal'>Form</i> class instances that must be
+populated by your code. It can then use this array to find <i style='mso-bidi-font-style:
+normal'>Form</i> class instances given the form resource IDs. It also keeps a
+pointer to the currently active <i style='mso-bidi-font-style:normal'>Form</i>,
+so that it can pass events to this <i style='mso-bidi-font-style:normal'>Form</i>.
+</p>
+
+<p>The <i style='mso-bidi-font-style:normal'>Application</i> constructor takes
+two arguments - the number of <i style='mso-bidi-font-style:normal'>Form</i>s
+in the <i style='mso-bidi-font-style:normal'>Application</i>, and the resource
+ID of the initial <i style='mso-bidi-font-style:normal'>Form</i>. Your derived <i
+style='mso-bidi-font-style:normal'>Application</i> should declare the <i
+style='mso-bidi-font-style:normal'>Form</i>s as members of the <i
+style='mso-bidi-font-style:normal'>Application</i> (or allocate them
+dynamically in the <i style='mso-bidi-font-style:normal'>Application</i>
+constructor). You can also optionally have virtual methods to open and close
+databases at the start and end of the <i style='mso-bidi-font-style:normal'>Application</i>'s
+execution, as well as methods to do other initialization and cleanup - but the
+only mandatory requirements of a derived <i style='mso-bidi-font-style:normal'>Application</i>
+are the calling of the <i style='mso-bidi-font-style:normal'>Application</i>
+constructor and the instantiation of the <i style='mso-bidi-font-style:normal'>Form</i>s.
+</p>
+
+<p>Lastly, your own applications need to define a <span class=SpellE><i
+style='mso-bidi-font-style:normal'>RunApplication</i></span> function which
+allocates an appropriate <i style='mso-bidi-font-style:normal'>Application</i>
+subclass, calls its <i style='mso-bidi-font-style:normal'>Main</i> method, and
+then <span class=SpellE>deallocates</span> it and returns the value returned by
+the <i style='mso-bidi-font-style:normal'>Main</i> method. </p>
+
+<p><b>A Simple Application</b> </p>
+
+<p>To illustrate the use of the framework, we now turn to a simple application
+called <span class=SpellE>ScoreBoard</span>. <span class=SpellE>ScoreBoard</span>
+allows you to keep a record of people's names and scores - this could be for
+any game in which points are awarded. The information is stored in a database,
+and the records can be edited or deleted, new entries can be made, and the
+records can be displayed sorted by name or sorted by score. </p>
+
+<p>To begin with, the framework expects you to create a header file for each
+application, called <span class=SpellE><b>mypilot.h</b></span>. This header
+file should in turn include both the &lt;<span class=SpellE>PalmOS.h</span>&gt;
+header file, and the resource header file for your application (the latter is
+necessary only if you have an Edit menu that you want to be handled
+automatically by the framework). It should also define which features of the
+framework you wish to use - in the case of our application, databases, lists,
+fields, and database list sources. This allows your application to exclude
+those features of the framework that it does not require, resulting in smaller
+application .<span class=SpellE>pdb</span> files. </p>
+
+<p>Each record in the score database consists of an unsigned long for holding
+the score, as well as a variable size character array for storing the name. The
+<span class=SpellE><i style='mso-bidi-font-style:normal'>ScoreDatabase</i></span>
+class declares the records as a <span class=SpellE><i style='mso-bidi-font-style:
+normal'>ScoreEntry</i></span> <span class=SpellE>struct</span>. It also defines
+methods for getting an entry based on the record index, adding and deleting
+entries, editing an existing entry, and sorting the database. </p>
+
+<p>The constructor calls the <span class=SpellE><i style='mso-bidi-font-style:
+normal'>OpenByType</i></span> method to open the database in read-write mode
+(creating it if necessary). The type is `<span class=SpellE>scor</span>'
+(please note that this type has <i>not</i> been registered with Palm, Inc!). It
+is assumed that there is only one such database - this should usually <span
+class=GramE>be</span> the case unless you explicitly install multiple score .<span
+class=SpellE>pdb</span> files on your device. </p>
+
+<p>In order to sort the database, a comparison function has to be defined; this
+is named <span class=SpellE><i style='mso-bidi-font-style:normal'>sortcmp</i></span>.
+This function is not passed the sort order. This means that we either need two
+separate sort functions, or we need to get the sort order in some other way.
+One way would be to use a global variable. However, for pedagogical purposes, I
+have used the application info block to store the sort order, and retrieve it
+from there (the application info block is an area where you can store state
+information for your application to persist across invocations. For small
+applications this is a useful thing to do. For larger applications I recommend
+using a separate database for such information, so that your application .<span
+class=SpellE>prc</span> file can be treated as read-only, and thus successfully
+moved to flash RAM using a utility such as <span class=SpellE>JackFlash</span>!).
+</p>
+
+<p>The remaining methods used by <span class=SpellE><i style='mso-bidi-font-style:
+normal'>ScoreDatabase</i></span> are straightforward applications of the
+methods from the <i style='mso-bidi-font-style:normal'>Database</i> class. </p>
+
+<p>To display the names and scores, we use a <i style='mso-bidi-font-style:
+normal'>List</i>. Because the entries are stored in a database, this is a
+dynamic <i style='mso-bidi-font-style:normal'>List</i> with a <span
+class=SpellE><i style='mso-bidi-font-style:normal'>RecordListSource</i></span>.
+The <span class=SpellE><i style='mso-bidi-font-style:normal'>RecordListSource</i></span>
+is declared as a subclass, <span class=SpellE><i style='mso-bidi-font-style:
+normal'>ScoreListSource</i></span>. Such subclasses must define a virtual <i
+style='mso-bidi-font-style:normal'>Format</i> method to print the contents of a
+record as an appropriate text line. Note that tables are actually a better
+approach for displaying multi-column records - because of the use of
+proportional fonts on the <span class=GramE>Palm,</span> lining up columns
+using lists is a difficult task. For the purposes of our application, we will
+not get too concerned about that here. </p>
+
+<p>The dynamic score list itself is declared as a subclass, <span class=SpellE><i
+style='mso-bidi-font-style:normal'>ScoreList</i></span>. This is a trivial
+class that just declares the <span class=SpellE><i style='mso-bidi-font-style:
+normal'>ScoreListSource</i></span> member. </p>
+
+<p>We use another list for specifying the sort order. In this case the list is
+static - there are only two sort orders and I know ahead what they are, so I
+can specify the list items in the resource file. The <span class=SpellE><i
+style='mso-bidi-font-style:normal'>SortOrderList</i></span> class thus does not
+need to declare a <span class=SpellE><i style='mso-bidi-font-style:normal'>ListSource</i></span>
+or invoke the LISTHANDLER macro. It does declare a virtual <span class=SpellE><i
+style='mso-bidi-font-style:normal'>HandleSelect</i></span> method, however,
+which sorts the database according to the sort order selected. </p>
+
+<p>The application has two forms, the <span class=SpellE><i style='mso-bidi-font-style:
+normal'>EditForm</i></span> for editing new or existing records, and the <span
+class=SpellE><i style='mso-bidi-font-style:normal'>ScoreForm</i></span>, for
+displaying the list of records. The <span class=SpellE><i style='mso-bidi-font-style:
+normal'>ScoreForm</i></span> has two lists, the <span class=SpellE><i
+style='mso-bidi-font-style:normal'>ScoreList</i></span> for displaying the
+names and scores, and the <span class=SpellE><i style='mso-bidi-font-style:
+normal'>SortOrderList</i></span> for selecting the sort order. It also has
+three buttons, one for adding a new record, one for deleting a selected record,
+and one for editing a selected record. It has a simple help menu with just one
+item that displays an `About' dialog. There are three event handlers - one to
+handle the menu, one to handle the buttons, and one to handle the sort order
+list. The menu handler is trivial; it just calls <span class=SpellE><i
+style='mso-bidi-font-style:normal'>FrmAlert</i></span> to show the <span
+class=GramE>About</span> alert dialog box. The handler for the <span
+class=SpellE><i style='mso-bidi-font-style:normal'>SortOrderList</i></span>
+calls the list's own select event handler (which sorts the database) and then
+updates the display <span class=GramE>be</span> erasing the current contents of
+the list and posting an update event. The button handler handles each of the
+three buttons. For record deletion, it will delete the selected record, if any,
+and then update the display. For editing a selected record or adding a new
+record, it gets a pointer to the <span class=SpellE><i style='mso-bidi-font-style:
+normal'>EditForm</i></span>, and uses this to tell the <span class=SpellE><i
+style='mso-bidi-font-style:normal'>EditForm</i></span> the record number that
+should be edited (if adding a record this is the index of the last record plus
+one). It then switches to the <span class=SpellE><i style='mso-bidi-font-style:
+normal'>EditForm</i></span>. </p>
+
+<p>The <span class=SpellE>E<i style='mso-bidi-font-style:normal'>ditForm</i></span>
+is also quite simple. It has two fields, one for the name and one for the
+score. It also has a member variable for storing the index of the record being
+edited - this variable gets set by the <span class=SpellE><i style='mso-bidi-font-style:
+normal'>ScoreForm</i></span> before switching to the <span class=SpellE><i
+style='mso-bidi-font-style:normal'>EditForm</i></span>. The form also has two
+buttons, labeled `Done' and `Cancel', and thus has an event handler for
+handling button taps. It also has an event handler for handling form open
+events - this handler either clears the two forms (if the record being edited
+does not exist) or initializes them with the appropriate data from the database
+record. The handler for button taps does the opposite if the `Done' button was
+tapped - it gets the name and score from the fields, and then either sets the
+data in the record being edited using these values or creates a new record with
+these values. Both the `Done' and `Cancel' buttons then cause the <span
+class=SpellE><i style='mso-bidi-font-style:normal'>EditForm</i></span> to
+switch control back to the <span class=SpellE><i style='mso-bidi-font-style:
+normal'>ScoreForm</i></span>. </p>
+
+<p>The <span class=SpellE><i style='mso-bidi-font-style:normal'>EditForm</i></span>
+also has an Edit menu, with the usual Cut/Copy/Paste/Select All etc functions.
+Because this menu uses the preprocessor macro names <span class=SpellE>EdtCut</span>,
+<span class=SpellE>EditCopy</span>, etc, for the menu items, it is handled
+completely transparently by the framework, and there is no additional code
+required to provide this functionality. </p>
+
+<p><b>What's Missing From <span class=GramE>The</span> Framework</b> </p>
+
+<p>The framework provides a good starting point for building applications for <span
+class=SpellE>PalmOS</span>. I have used it as the basis of a series of
+successful shareware programs. There are some things that have not been
+included, that limit its use. In particular, it offers no support as yet for
+tables, or scrollable fields. Nor does it support some of the more specialized
+areas of the <span class=SpellE>PalmOS</span> API, such as networking and
+infra-red. There is no support yet for developing conduits, and no built-in
+functionality supporting global finds. </p>
+
+<p>Nonetheless, support for all of these and more could in principle be added
+if they were needed; I simply haven't needed them in my own applications. Even
+without these features, you should find that you can still build useful Palm
+applications with much less effort, and a faster learning curve, using this
+framework library. <br>
+&nbsp; <br>
+&nbsp; <br>
+&nbsp; <br>
+&nbsp; <br>
+&nbsp; <br>
+&nbsp; </p>
+
+</div>
+
+</body>
+
+</html>

@@ -1,16 +1,43 @@
-Apparently sometimes the letter case isn't set to upper upon entry
+Right now (18/3/2001) the code is as for 2.4, but the version number
+has been changed to 2.5 and the whole tree structure has been cleaned
+up much better than before.
 
-After choosing a dictionary, the selection should persist rather
-than going back to `default'
+Reimplement the template algorithm as follows:
 
-Need an option to send the results to a memo
+Any non-floats get entered into a template as before.
 
-Requested: an option to run the same query against a different dictionary
-(can be done already but they want a shortcut from the Word form to
-pop up the dict list and then run the query).
+Floats get divided into wilds, single letters, and ranges, much as before.
 
-Regular expression support
+As we recurse, we keep track at each point whether we allocated nothing
+(template) or a float, and if the latter, what type of float.
 
-Simplified variable input
+When allocating floats, first try allocate a letter. If not possible, 
+try to allocate a range. If there is more than one possible allocation
+for the range, note this. This also requires checking already allocated
+ranges, where the letter assigned to the already allocated range also
+is a non-unique allocation. If no float allocation is possible, try 
+substitution with an already allocated float. If this is not possible,
+allocate a wild.
 
-
+Basically we want the same as our existing algorithm except we allocate
+the floats on the fly, instead of trying to find an allocation at the
+end that satisfies our needs. One table that may help to do this is
+a table of 26 elts each having a bitmask representing which range 
+elements can be used for a letter. When we allocate floats, we should
+try to use the narrowest ranges first.
+
+This may end up being more complex than our existing approach, of course,
+but in theory it should be more optimal as we should fail sooner if a
+match is not possible.
+
+On a separate note, it may be a good idea to eliminate the variables.
+Still do ciphers, but don't maintain context - leave that for the
+user to do.
+
+If we do all matchs from one screen and thus have just one history, we
+should save the match type in the history.
+
+It would be nice to have alternation and grouping in regexps - can we
+do this without recursing too much?
+
+

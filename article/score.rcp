@@ -1,0 +1,68 @@
+//	Palm App Name: 		"ScoreBoard"
+
+#include "score_res.h"
+
+VERSION "1.0"
+
+FORM EditFormForm AT (0 0 160 160) NOSAVEBEHIND
+MENUID EditFormMenuMenuBar
+BEGIN
+    TITLE "ScoreBoard"
+    BUTTON "Done" EditFormDoneButton AT (34 127 36 12)
+    BUTTON "Cancel" EditFormCancelButton AT (97 128 36 12)
+    FIELD  EditFormNameField AT (50 30 100 12) MAXCHARS 40 UNDERLINED
+    FIELD  EditFormScoreField AT (50 80 50 12) MAXCHARS 10 UNDERLINED
+    LABEL  "Name:" EditFormNameLabel AT (18 30)
+    LABEL  "Score:" EditFormScoreLabel AT (18 80)
+END
+
+
+FORM ScoreFormForm AT (0 0 160 160) NOSAVEBEHIND
+MENUID ScoreFormMenuMenuBar
+BEGIN
+    TITLE "ScoreBoard"
+    LABEL "Sort By:" ID ScoreFormSortOrderLabel AT (5 132)
+    POPUPTRIGGER "Name" ID ScoreFormSortOrderPopTrigger AT (50 132 45 12) 
+    POPUPLIST ID ScoreFormSortOrderPopTrigger ScoreFormSortOrderList
+    LIST "Name" "Score" ID ScoreFormSortOrderList AT (40 142 40 AUTO) NONUSABLE VISIBLEITEMS 2
+    BUTTON "New" ScoreFormNewButton AT (5 147 36 12)
+    BUTTON "Edit" ScoreFormEditButton AT (59 147 36 12)
+    BUTTON "Delete" ScoreFormDeleteButton AT (119 147 36 12)
+    LIST "" ID ScoreFormScoreList AT (CENTER 17 158 AUTO) VISIBLEITEMS 10
+END
+
+MENU ID EditFormMenuMenuBar
+BEGIN
+    PULLDOWN "Edit"
+    BEGIN
+	MENUITEM "Undo" ID EditUndo "U"
+	MENUITEM "Cut" ID EditCut "X"
+	MENUITEM "Copy" ID EditCopy "C"
+	MENUITEM "Paste" ID EditPaste "P"
+	MENUITEM "Select All" ID EditSelectAll "S"
+	MENUITEM SEPARATOR
+	MENUITEM "Keyboard" ID EditKeyboard "K"
+	MENUITEM "Graffiti" ID EditGraffiti "G"
+    END
+    PULLDOWN "Help"
+    BEGIN
+	MENUITEM "About" ID HelpAbout "A"
+    END
+END
+    
+MENU ID ScoreFormMenuMenuBar
+BEGIN
+    PULLDOWN "Help"
+    BEGIN
+	MENUITEM "About" ID HelpAbout "A"
+    END
+END
+    
+ALERT ID AboutAlert INFORMATION
+BEGIN
+    TITLE "About ScoreBoard"
+    MESSAGE "ScoreBoard v1.0 by Graham Wheeler gramster@bigfoot.com"
+    BUTTONS "Done"
+END
+
+

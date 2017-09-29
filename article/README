@@ -1,0 +1,17 @@
+Description of the Files
+========================
+
+ddj.html	- The article
+
+fw.h		- The framework header file
+fw.cc		- The framework source file
+
+Makefile	- Makefile for the sample program
+mypilot.h	- Required header file for the sample program
+score.cc	- The sample program
+score.def	- .def file needed by pilrc for the sample program
+score.rcp	- resource file needed by pilrc for the sample program
+score_res.h	- resource ID header file needed by sample program
+
+score.prc	- The compiled sample program
+

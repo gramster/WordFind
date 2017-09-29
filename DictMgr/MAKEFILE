@@ -1,0 +1,104 @@
+# Use these for Borland
+#CC=bcc32
+#DEBUG=-v
+#LANG=-P
+#OPT=-O
+#INC=-I../src
+#OUT=
+
+# Use these for Microsoft
+
+CC=cl
+#DEBUG=/Zi
+INC=/I../src
+LANG=/TP
+OPT=/GB
+OUT=/Fdictmgr.exe
+
+default: dictmgr.exe
+
+all: dictmgr.exe dicts
+
+dicts: demo.pdb lite\ospd3.pdb plus\ospd3.pdb pro\ospd3.pdb lite\small.pdb plus\small.pdb pro\small.pdb lite\medium.pdb \
+	plus\medium.pdb pro\medium.pdb plus\large.pdb pro\large.pdb pro\scrabtor.pdb pro\huge.pdb
+
+lite\ospd3.pdb: ospd3.pdb
+	copy ospd3.pdb lite
+	dictmgr -P 1 lite\ospd3.pdb
+
+plus\ospd3.pdb: ospd3.pdb
+	copy ospd3.pdb plus
+	dictmgr -P 2 plus\ospd3.pdb
+
+pro\ospd3.pdb: ospd3.pdb
+	copy ospd3.pdb pro
+	dictmgr -P 3 pro\ospd3.pdb
+
+lite\small.pdb: small.pdb
+	copy small.pdb lite
+	dictmgr -P 1 lite\small.pdb
+
+plus\small.pdb: small.pdb
+	copy small.pdb plus
+	dictmgr -P 2 plus\small.pdb
+
+pro\small.pdb: small.pdb
+	copy small.pdb pro
+	dictmgr -P 3 pro\small.pdb
+
+lite\medium.pdb: medium.pdb
+	copy medium.pdb lite
+	dictmgr -P 1 lite\medium.pdb
+
+plus\medium.pdb: medium.pdb
+	copy medium.pdb plus
+	dictmgr -P 2 plus\medium.pdb
+
+pro\medium.pdb: medium.pdb
+	copy medium.pdb pro
+	dictmgr -P 3 pro\medium.pdb
+
+plus\large.pdb: large.pdb
+	copy large.pdb plus
+	dictmgr -P 2 plus\large.pdb
+
+pro\large.pdb: large.pdb
+	copy large.pdb pro
+	dictmgr -P 3 pro\large.pdb
+
+pro\scrabtor.pdb: scrabtor.pdb
+	copy scrabtor.pdb pro
+	dictmgr -P 3 pro\scrabtor.pdb
+
+pro\huge.pdb: huge.pdb
+	copy huge.pdb pro
+	dictmgr -P 3 pro\huge.pdb
+
+dictmgr.exe: dictmgr.cc
+	$(CC) $(LANG) $(OPT) $(DEBUG) $(INC) $(OUT) dictmgr.cc
+
+demo.pdb : demo.txt
+	dictmgr -S -n "Trial" -F 0 -o demo.pdb demo.txt
+
+ospd3.pdb : ospd3.txt
+	dictmgr -S -n "OSPD3" -F 1 -o ospd3.pdb ospd3.txt
+
+small.pdb : small.txt
+	dictmgr -S -n "Small" -F 1 -o small.pdb small.txt
+
+medium.pdb : medium.txt
+	dictmgr -S -n "Medium" -F 1 -o medium.pdb medium.txt
+
+large.pdb : large.txt
+	dictmgr -S -n "Large" -F 2 -o large.pdb large.txt
+
+huge.pdb : huge.txt
+	dictmgr -S -n "Huge" -F 3 -o huge.pdb huge.txt
+
+scrabtor.pdb : scrabtor.txt
+	dictmgr -S -n "Scrabble Tournament" -F 3 -o scrabtor.pdb scrabtor.txt
+
+test.pdb : test.txt
+	dictmgr -S -n "test" -F 3 -o test.pdb test.txt
+
+
