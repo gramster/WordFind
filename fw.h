@@ -10,6 +10,7 @@
 #define islower(c)		((c)>='a' && (c)<='z')
 #define toupper(c)		((char)(islower(c) ? ((c)-'a'+'A') : (c)))
 #define isalpha(c)		(isupper(c) || islower(c))
+#define isdigit(c)		((c)>='0' && (c)<='9')
 #define InRange(v, mn, mx)	((v) >= (mn) && (v) <= (mx))
 
 #ifndef TEST
@@ -17,15 +18,12 @@
 #define strcat(dst, src)	StrCat(dst, src)
 #define strlen(s)		StrLen(s)
 #define strcmp(s1, s2)		StrCompare(s1, s2)
-#define itoa(l)			StrIToA(l)
-
 #endif
 
 void strncpy(char *dst, const char *src, unsigned n);
 void memcpy(char *dst, const char *src, unsigned n);
 void memset(char *dst, const char v, unsigned n);
 int strncmp(const char *s1, const char *s2, unsigned n);
-const char *ltoa(unsigned long l);
 
 void HMemCopy(char *buf, VoidHand h, UInt maxlen);
 
@@ -122,6 +120,7 @@ class List
     }
     virtual void Init();
     virtual Boolean Activate();
+    virtual Boolean HandleSelect(UInt selection);
     void Erase();
     virtual ~List();
 };
@@ -136,7 +135,7 @@ class Form
     virtual Boolean HandleScroll(UInt objID, Short oldv, Short newv);
     virtual Boolean HandleSelect(UInt objID);
     virtual Boolean HandleMenu(UInt menuID);
-//    virtual Boolean HandleListSelect(UInt listID, UInt selection);
+    virtual Boolean HandleListSelect(UInt listID, UInt selection);
     virtual Boolean HandlePopupListSelect(UInt triggerID,
 					UInt listID,
 					UInt selection);
@@ -163,8 +162,10 @@ class Form
         ::FrmDrawForm(frm);
     }
     void DrawControl(UInt id);
-    void EnableControl(UInt id);
+    void EnableControl(UInt id, int v = 1);
     void DisableControl(UInt id);
+    void HideControl(UInt resid);
+    void ShowControl(UInt resid);
     void SetControlLabel(UInt resid, const char *lbl);
     void ClearField(UInt resid);
     CharPtr ReadField(UInt resid);
@@ -174,7 +175,7 @@ class Form
     void SetField(UInt resid, const char *text);
     void DrawRectangle(int left, int top, int width, int height);
     void ClearRectangle(int left, int top, int width, int height);
-    void Switch(UInt resid); // activate a different form
+    Form *Switch(UInt resid); // activate a different form
     VoidPtr GetObject(UInt resid);
     Boolean IsActive() const;
     virtual Boolean Activate(); // pre-draw time
@@ -220,6 +221,7 @@ class RadioGroupDialog : public Dialog
     {}
     virtual void Init();
     virtual Boolean Activate();
+    virtual Boolean HandleSelect(UInt objID);
     virtual UInt Run();
     virtual ~RadioGroupDialog();
 };

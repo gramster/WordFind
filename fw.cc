@@ -44,23 +44,6 @@ int strncmp(const char *s1, const char *s2, unsigned n)
     return (n==0) ? 0 : (*s1-*s2);
 }
 
-const char *ltoa(unsigned long l)
-{
-    if (l <= 0)
-    	return "0";
-    else
-    {
-        static char x[10];
-    	int p = 10;
-    	while (l)
-    	{
-        	x[--p] = (char)((l%10)+'0');
-        	l = l / 10;
-    	}
-    	return x+p;
-    }
-}
-
 void HMemCopy(char *buf, VoidHand h, UInt maxlen)
 {
     buf[0] = 0;
@@ -177,6 +160,12 @@ void List::Erase()
     if (lst) LstEraseList(lst);
 }
 
+Boolean List::HandleSelect(UInt selection)
+{
+    (void)selection;
+    return False;
+}
+
 char *List::GetItem(UInt idx)
 {
     (void)idx;
@@ -202,6 +191,7 @@ Form::Form(UInt id_in)
 void Form::Init()
 {
     frm = ::FrmInitForm(id);
+    if (GetList()) GetList()->Init();
 }
 
 void Form::ShowProgress(int p)
@@ -234,16 +224,28 @@ void Form::DrawControl(UInt resid)
     }
 }
 
-void Form::EnableControl(UInt resid)
+void Form::EnableControl(UInt resid, int v)
 {
     ControlPtr b = (ControlPtr)GetObject(resid);
-    if (b) CtlSetEnabled(b, 1);
+    if (b) CtlSetEnabled(b, (unsigned char)v);
 }
 
 void Form::DisableControl(UInt resid)
 {
     ControlPtr b = (ControlPtr)GetObject(resid);
     if (b) CtlSetEnabled(b, 0);
+}
+
+void Form::HideControl(UInt resid)
+{
+    ControlPtr b = (ControlPtr)GetObject(resid);
+    if (b) CtlHideControl(b);
+}
+
+void Form::ShowControl(UInt resid)
+{
+    ControlPtr b = (ControlPtr)GetObject(resid);
+    if (b) CtlShowControl(b);
 }
 
 void Form::SetControlLabel(UInt resid, const char *lbl)
@@ -325,15 +327,18 @@ Boolean Form::Activate()
 	Application::Instance()->SetActiveForm(this);
         ::FrmSetActiveForm(frm);
         ::FrmSetEventHandler(frm, Form::EventHandler);
+	if (GetList())
+	    return GetList()->Activate();
         return True;
     }
     return False;
 }
 
-void Form::Switch(UInt resid) // activate a different form
+Form *Form::Switch(UInt resid) // activate a different form
 {
     Form *f = Application::Instance()->GetForm(resid);
     if (f) f->PostLoadEvent();
+    return f;
 }
 
 Boolean Form::EventHandler(EventPtr event) // static
@@ -356,6 +361,7 @@ Boolean Form::EventHandler(EventPtr event) // static
     case frmOpenEvent:
 	handled = form->Open();
 	break;
+//    case frmCloseEvent:
     case frmUpdateEvent:
 	handled = form->Update();
 	break;
@@ -366,6 +372,11 @@ Boolean Form::EventHandler(EventPtr event) // static
 	handled = form->HandlePopupListSelect(event->data.popSelect.controlID,
 						event->data.popSelect.listID,
 						event->data.popSelect.selection);
+	break;
+    case lstSelectEvent:
+	(void)form->HandleListSelect(event->data.lstSelect.listID,
+	      				event->data.lstSelect.selection);
+	handled = False; // important!
 	break;
     default:
         handled = False;
@@ -387,6 +398,13 @@ Boolean Form::HandlePopupListSelect(UInt triggerID,
 					UInt selection)
 {
     (void)triggerID;
+    (void)listID;
+    (void)selection;
+    return False;
+}
+
+Boolean Form::HandleListSelect(UInt listID, UInt selection)
+{
     (void)listID;
     (void)selection;
     return False;
@@ -449,7 +467,7 @@ Boolean Dialog::HandleScroll(UInt objID, Short oldv, Short newv)
 {
     return Form::HandleScroll(objID, oldv, newv);
 }
-
+     
 UInt Dialog::Run()
 {
     Init();
@@ -484,6 +502,19 @@ Boolean RadioGroupDialog::Activate()
 	return True;
     }
     return False;
+}
+
+Boolean RadioGroupDialog::HandleSelect(UInt objID)
+{
+    if (objID >= firstcb && objID < (firstcb+numcbs))
+    {
+        for (UInt i = 0; i < numcbs; i++)
+        {
+            ControlPtr s = (ControlPtr)GetObject(firstcb+i);
+            if (s) CtlSetValue(s, (Short)((i==(objID-firstcb))?1:0));
+        }
+    }
+    return Dialog::HandleSelect(objID);
 }
 
 UInt RadioGroupDialog::Run()
@@ -716,5 +747,6 @@ DWord PilotMain(Word cmd, Ptr cmdPBP, Word launchflags)
 }
 
 //------------------------------------------------------------------
+
 
 

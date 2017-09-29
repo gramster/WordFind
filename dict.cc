@@ -1,5 +1,7 @@
 #include "mypilot.h"
 
+#define VARVECT
+
 #ifndef TEST
 #include "ptrsc.h"
 #include "fw.h"
@@ -8,12 +10,49 @@
 #include "dict.h"
 
 #ifdef TEST
+extern int debug;
+
+void ShowVector(unsigned long *vec)
+{
+    printf("\nVar assignments:\n\n");
+    for (int v = 0; v < 27; v++)
+    {
+        printf("%02d ", v);
+	for (int c = 0; c < 26; c++)
+	    if ((vec[v] & (1ul<<c)) != 0)
+		printf("%c", c+'A');
+	printf("\n");
+    }
+}
+
+#endif
+
+const char *ltoa(unsigned long l)
+{
+    if (l == 0)
+    	return "0";
+    else
+    {
+        static char x[10];
+    	int p = 9;
+	x[9]=0;
+    	while (l)
+    	{
+            x[--p] = (char)((l%10)+'0');
+            l = l / 10;
+    	}
+    	return x+p;
+    }
+}
+
+#ifdef TEST
 DictionaryDatabase::DictionaryDatabase() :
 #else
 DictionaryDatabase::DictionaryDatabase(class Form *owner_in) :
       Database(),
       owner(owner_in),
 #endif
+      varvector_out(0),
       current_record(0),
       current_recnum(-1),
       sp(0),
@@ -40,6 +79,7 @@ DictionaryDatabase::DictionaryDatabase(class Form *owner_in) :
       lennow(0),
       progpoint(0),
       has_float_ranges(0),
+      simple_search(1),
       has_place_constraints(0)
 
 {
@@ -47,13 +87,16 @@ DictionaryDatabase::DictionaryDatabase(class Form *owner_in) :
     memset((char*)fixedpool, 0, sizeof(fixedpool[0])*26);
     memset((char*)maxpool, 0, sizeof(maxpool[0])*26);
     memset((char*)need, 0, sizeof(need[0])*26);
+#ifdef VARVECT
+    memset((char*)varvector_in, (char)0xff, sizeof(varvector_in[0])*27);
+#endif
     memset((char*)nstk, 0, sizeof(nstk[0])*30);
     memset((char*)starts, 0, sizeof(starts[0])*32);
     memset((char*)anchormasks, 0, sizeof(anchormasks[0])*MAXPATLEN);
     memset((char*)varpool, 0, sizeof(varpool[0])*MAXPATLEN);
     memset((char*)wlen, 0, sizeof(wlen[0])*32);
     memset((char*)vpos, 0, sizeof(vpos[0])*32);
-    memset((char*)lastmulti, 0, sizeof(lastmulti[0])*32);
+    memset((char*)lastmulti, 0, sizeof(lastmulti[0])*80);
 
     // open the database
     (void)Open();
@@ -106,24 +149,31 @@ const char *DictionaryDatabase::MatchTypeName(UInt t)
 
 const char *DictionaryDatabase::LimitName(UInt n)
 {
-    static char b[3];
-    if (n > 0)
+    // these get used for labels and must be static for PalmOS
+    switch(n)
     {
-        if (n<9)
-        {
-            b[0] = (char)(n+'0');
-            b[1] = 0;
-            return b;
-        }
-        else if (n < 100)
-        {
-            b[0] = (char)((n/10)+'0');
-            b[1] = (char)((n%10)+'0');
-            b[2] = 0;
-            return b;
-        }
+    case 0: return "Any";
+    case 1: return "1";
+    case 2: return "2";
+    case 3: return "3";
+    case 4: return "4";
+    case 5: return "5";
+    case 6: return "6";
+    case 7: return "7";
+    case 8: return "8";
+    case 9: return "9";
+    case 10:return "10";
+    case 11:return "11";
+    case 12:return "12";
+    case 13:return "13";
+    case 14:return "14";
+    case 15:return "15";
+    case 16:return "16";
+    case 17:return "17";
+    case 18:return "18";
+    case 19:return "19";
     }
-    return "Any";
+    return "";
 }
 
 DictionaryDatabase::DictionaryNode
@@ -185,124 +235,159 @@ DictionaryDatabase::DictionaryNode
     return DictionaryNode(v);
 }
 
+unsigned long DictionaryDatabase::NextPatternElt(char *&pat,
+					int &is_float, int &is_single)
+{
+    unsigned long rtn = 0;
+    if (isupper(*pat))
+    {
+	is_single = 1;
+	is_float = 0;
+	rtn = LetterMask(*pat);
+    }
+    else if (*pat==':' || *pat == '*' || *pat == '=')
+    {
+	is_single = 1;
+	is_float = 0;
+	// fixed
+	if (*pat==':') rtn = ALL;
+	else if (*pat=='*') rtn = VOWELS; 
+	else if (*pat=='=') rtn = CONSONANTS;
+    }
+    else if (islower(*pat))
+    {
+	is_single = 1;
+	is_float = 1;
+	rtn = LetterMask((char)(*pat-('a'-'A')));
+    }
+    else if (*pat=='.' || *pat == '+' || *pat == '-')
+    {
+	is_single = 0;
+	is_float = 1;
+	if (*pat=='.') rtn = ALL;
+	else if (*pat=='+') rtn = VOWELS; 
+	else if (*pat=='-') rtn = CONSONANTS;
+    }
+    else if (*pat == '[' || *pat == '{' || *pat == '(' || *pat == '>')
+    {
+        unsigned long tmpmask = 0ul;
+	int negate = 0;
+	rtn = 0ul;
+	pat++;
+	rtn = 0l;
+	if (*pat=='!' || *pat=='^')
+	{
+	    negate=1;
+	    pat++;
+	}
+	is_float = islower(*pat);
+	while (*pat!=']' && *pat != '}' && *pat != ')' && *pat != '>')
+	{
+	    if (*pat==0) return 0; /* syntax error */
+	    char start = *pat;
+	    if (isupper(start)) 
+		tmpmask = LetterMask(start);
+	    else if (islower(start))
+	    {
+		start = toupper(start);
+		tmpmask = LetterMask(start);
+	    }
+	    else return 0; // syntax error
+	    pat++;
+	    if (*pat=='-')
+	    {
+		pat++;
+		if (!isalpha(*pat)) return 0; // syntax error
+		char end = *pat;
+		pat++;
+		if (islower(end))
+		    end = toupper(end);
+		while (start<=end)
+		{
+		    rtn |= tmpmask;
+		    tmpmask = LetterMask(++start);
+		}
+	    }
+	    else rtn |= tmpmask;
+	}
+	if (negate) rtn ^= ALL;
+    }
+    return rtn;
+}
+
 char *DictionaryDatabase::NextPat(char *pat, int pos)
 {
     while (isspace(*pat)) pat++;
     if (*pat)
     {
 	unsigned long v;
-        if (isupper(*pat) || *pat==':' || *pat == '*' || *pat == '=')
-        {
-	    // fixed
-	    if (*pat==':') v = ALL;
-	    else if (*pat=='*') v = VOWELS; 
-	    else if (*pat=='=') v = CONSONANTS;
-	    else
-	    {
-	        v = LetterMask(*pat);
-	        if (pos==progpoint) ++progpoint;
-	    }
-	    anchormasks[vlen++] = v;
-        }
-        else if (islower(*pat))
+#ifdef WORDEND
+        if (*pat == '|')
 	{
-	    ++fixedpool[*pat-'a'];
-	    ++maxpool[*pat-'a'];
-	    anchormasks[vlen++] = 0l;
-	    has_float_ranges = 1;
+	    if (vlen>0)
+	    {
+		anchormasks[vlen-1] |= WORDEND;
+	    	simple_search = 0;
+		has_wordend_constraints = 1;
+	    }
 	}
-	else if (*pat=='.' || *pat == '+' || *pat == '-')
+	else
+#endif
+	if (isdigit(*pat)) // variable placeholder
 	{
-	    if (*pat=='.')
+	    v = (*pat)-'0';
+	    if (isdigit(pat[1]))
 	    {
-	        ++wildfloats;
-		for (int i = 0; i < 26; i++)
-		    ++maxpool[i];
+ 		v = v*10 + (pat[1]-'0');
+	    	++pat;
 	    }
-	    else if (*pat=='+')
+	    if (v > 26) return 0; // must be in range 0..26
+	    anchormasks[vlen++] = VARNUM | v;
+	    simple_search = 0;
+	    if (pat[1]=='/') // associated letter is explicitly given
 	    {
-	        has_float_ranges = 1;
-		varpool[plen++] = VOWELS;
-		++maxpool['A'-'A'];
-		++maxpool['E'-'A'];
-		++maxpool['I'-'A'];
-		++maxpool['O'-'A'];
-		++maxpool['U'-'A'];
+	        pat += 2;
+#ifdef VARVECT
+	        int is_float, is_single;
+		if (varvector_out &&
+		    (varvector_in[v] = NextPatternElt(pat, is_float, is_single)) == 0)
+		    return 0; // syntax error
+#endif
 	    }
-	    else if (*pat=='-')
-	    {
-	        has_float_ranges = 1;
-		varpool[plen++] = CONSONANTS;
-		for (int i = 0; i < 26; i++)
-		    ++maxpool[i];
-		--maxpool['A'-'A'];
-		--maxpool['E'-'A'];
-		--maxpool['I'-'A'];
-		--maxpool['O'-'A'];
-		--maxpool['U'-'A'];
-	    }
-	    anchormasks[vlen++] = 0l;
 	}
-	else if (*pat == '[' || *pat == '{' || *pat == '(' || *pat == '>')
+        else
 	{
-	    unsigned long mask = 0ul;
-	    int negate = 0;
-	    pat++;
-	    v = 0l;
-	    if (*pat=='!' || *pat=='^')
-	    {
-		negate=1;
-		pat++;
-	    }
-	    int upper = isupper(*pat);
-	    while (*pat!=']' && *pat != '}' && *pat != ')' && *pat != '>')
-	    {
-	    	if (*pat==0) return 0; /* syntax error */
-		char start = *pat;
-		if (isupper(start)) 
-		    mask = LetterMask(start);
-		else if (islower(start))
-		{
-		    start = toupper(start);
-		    mask = LetterMask(start);
-		}
-		else return 0; // syntax error
-		pat++;
-		if (*pat=='-')
-		{
-		    pat++;
-		    if (!isalpha(*pat)) return 0; // syntax error
-		    char end = *pat;
-		    pat++;
-		    if (islower(end))
-		        end = toupper(end);
-		    while (start<=end)
-		    {
-			v |= mask;
-			mask = LetterMask(++start);
-		    }
-		}
-		else v |= mask;
-	    }
-	    if (negate) v ^= ALL;
-	    if (upper)
-	        anchormasks[vlen++] = v;
-	    else
+	    int is_float, is_single;
+	    v = NextPatternElt(pat, is_float, is_single);
+	    if (v == 0) return 0; // syntax error
+	    if (is_float)
 	    {
 	        anchormasks[vlen++] = 0l;
-		if (v == ALL)
+		if (is_single)
+		{
+	    	    ++fixedpool[*pat-'a'];
+	    	    has_float_ranges = 1;
+	    	    simple_search = 0;
+		}
+		else if ((v&ALL)==ALL)
 		    ++wildfloats;
 		else
 		{
-	            varpool[plen++] = v;
+		    varpool[plen++] = v;
 	            has_float_ranges = 1;
+	            simple_search = 0;
 		}
-		for (int k = 0; k < 26; k++)
-		    if (((1ul<<k) & v) != 0l)
-			++maxpool[k];
+		for (int i = 0; i < 26; i++)
+		    if ((v & (1ul<<i)) != 0)
+		    	++maxpool[i];
+	    }
+	    else
+	    {
+		anchormasks[vlen++] = v;
+		if (is_single && pos==progpoint) ++progpoint;
 	    }
 	}
-	pat++;
+	++pat;
     }
     return (plen>32) ? 0 : pat; // only allow 32 floating ranges
     				// (i.e. unsigned long bitmask).
@@ -311,21 +396,23 @@ char *DictionaryDatabase::NextPat(char *pat, int pos)
 int DictionaryDatabase::FindPoolAllocation(unsigned pos, int tot, int wilds,
 						unsigned long pmask)
 {
-    if (tot<=wilds) return 0;
-    while (need[pos]==0 && pos<26) ++pos;
-    if (pos==26) return 0; // don't need anything
+    if (tot<=wilds) return 0; // trivial to satisfy 
+    while (need[pos]==0)
+        if (++pos == 26)
+	    return 0;
+    unsigned long ppmask = 1, posmask = (1ul<<pos);
     for (int j = 0; j < plen; j++)
     {
-	unsigned long ppmask = (1ul<<j);
 	if ((pmask & ppmask) != 0l) // haven't used this one
 	{
-	    if (((1ul<<pos) & varpool[j]) != 0l) // letter is in range
+	    if ((posmask & varpool[j]) != 0l) // letter is in range
 	    {
 		--need[pos];
 		int rtn = FindPoolAllocation(pos, tot-1, wilds, (pmask & ~ppmask));
 		++need[pos];
 		if (rtn== 0) return 0;
 	    }
+	    ppmask <<= 1;
 	}
     }
     // No more range allocations; use a wild if we have
@@ -368,7 +455,7 @@ int DictionaryDatabase::RemoveFromPool(int c)
 
 void DictionaryDatabase::ReplaceInPool(int c)
 {
-    if (--allocpool[c] >= fixedpool[c])
+    if (--allocpool[c] >= fixedpool[c]) // return to float?
     {
         --vtot;
 	--need[c];
@@ -378,19 +465,52 @@ void DictionaryDatabase::ReplaceInPool(int c)
 int DictionaryDatabase::GrabLetter(DictionaryNode &n)
 {
     unsigned long vmask = anchormasks[sp+vecoff];
-    if (vmask)
+    int idx = n.Index();
+    if (vmask & VARNUM) // variable
     {
-        if ((n.Mask() & vmask) != 0ul)
+	int vnum = (int)(vmask & 0xff);
+	if (vnum < 0 || vnum > 26) return -1;
+	if (refcount[vnum]==0) // first use
+	{
+	    if (varset[idx]==0)	// mustn't be in use by a different var
+#ifdef VARVECT
+	    	if (varvector_out==0 ||
+		   (varvector_in[vnum] & (1ul<<idx)) != 0) // must be allowed
+#endif
+	    {
+		refcount[vnum] = 1;
+		varset[idx] = vnum+1;
+	    	return 0;
+	    }
+	}
+	else if (varset[idx] == (vnum+1)) // must match earlier use
+	{
+	    ++refcount[vnum];
+	    return 0;
+	}
+    }
+    else if ((vmask & ALL) == 0) // floatiing
+    {
+        if (RemoveFromPool(idx) >= 0)
             return 0;
     }
-    else if (RemoveFromPool(n.Index()) >= 0)
-        return 0;
+    else // anchored
+    {
+	if (((1ul<<idx) & vmask) != 0ul)
+            return 0;
+    }
     return -1;
 }
 
 void DictionaryDatabase::ReplaceLetter(DictionaryNode &n)
 {
-    if (anchormasks[sp+vecoff]==0)
+    unsigned long vmask = anchormasks[sp+vecoff];
+    if (vmask & VARNUM) // variable
+    {
+	if (--refcount[vmask&0xff] == 0)
+	    varset[n.Index()] = 0;
+    }
+    else if ((vmask & ALL) == 0) // floating
 	 ReplaceInPool(n.Index());
 }
 
@@ -403,13 +523,16 @@ void DictionaryDatabase::InitStack(int l, int first_vec)
     vtot = 0;
     memset((char*)need, 0, sizeof(need[0])*26);
     memset((char*)starts, 0, sizeof(starts[0])*32);
+    memset((char*)refcount, 0, sizeof(refcount[0])*27);
+    memset((char*)varset, 0, sizeof(varset[0])*26);
 }
 
 int DictionaryDatabase::StartConsult(char *pat,
 				      int type_in,
 				      int multi_in,
 				      int minlen_in, int maxlen_in,
-				      int mincnt_in, int maxcnt_in)
+				      int mincnt_in, int maxcnt_in,
+				      unsigned long *varvector)
 {
     progpoint = 0;
 #ifdef TEST
@@ -425,12 +548,36 @@ int DictionaryDatabase::StartConsult(char *pat,
 	if (db == 0) return -1;
     }
 #endif
+#ifdef VARVECT
+    varvector_out = varvector;
+    if (varvector)
+    {
+	for (int i = 0; i < 27; i++)
+	{
+	    varvector_in[i] = varvector[i];
+	    if (varvector_in[i]&0x80000000ul)
+	        varvector_in[i] = 0x3ffffffful;
+	    varvector_out[i] = 0x80000000ul; // mark as unused
+	}
+    }
+#endif
     memset((char*)allocpool, 0, sizeof(allocpool[0])*26);
     memset((char*)fixedpool, 0, sizeof(fixedpool[0])*26);
     memset((char*)maxpool, 0, sizeof(maxpool[0])*26);
     vlen = plen = wildfloats = has_float_ranges = 0;
+    simple_search = 1;
     int px = 0;
+    has_place_constraints = 0;
+    has_wordend_constraints = 0;
     while (pat && *pat) pat = NextPat(pat, px++);
+#ifdef WORDEND 
+    if (has_wordend_constraints)
+    {
+	has_place_constraints = 1;
+	anchormasks[vlen-1] |= WORDEND;
+	multi_in = 1;
+    }
+#endif
     if (!has_float_ranges)
     {
         // convert any wildfloats into fixed ALLs
@@ -438,36 +585,39 @@ int DictionaryDatabase::StartConsult(char *pat,
 	{
 	    for (int i = 0; i < vlen; i++)
 	    {
-	        if (anchormasks[i]==0ul)
+	        if ((anchormasks[i]&ALL) == 0ul)
 		{
-		    anchormasks[i] = ALL;
+		    anchormasks[i] |= ALL;
 		    --wildfloats;
 		}
 	    }
 	}
     }
-    has_place_constraints = 0;
-    for (int i = 0; i < vlen; i++)
+    if (!has_place_constraints)
     {
-        if (anchormasks[i] != 0ul)
-	{
-	    has_place_constraints = 1;
-	    break;
+        for (int i = 0; i < vlen; i++)
+        {
+            if ((anchormasks[i]&ALL) != 0ul)
+	    {
+	        has_place_constraints = 1;
+	        break;
+	    }
 	}
     }
     minlen = minlen_in; maxlen = maxlen_in;
     mincnt = mincnt_in;	maxcnt = maxcnt_in;
     if (minlen < 1) minlen = 1;
     if (maxlen < 1 || maxlen > vlen) maxlen = vlen;
-    if (minlen < 1) minlen = 1;
-    if (mincnt < 1) mincnt = 1;
     matchtype = type_in;
     if (!multi_in)
     {
         mincnt = maxcnt = 1;
     }
-    else if (maxcnt < 1)
-        maxcnt = vlen;
+    else
+    {
+        if (mincnt < 1) mincnt = 1;
+        if (maxcnt < 1) maxcnt = vlen;
+    }
     // match=0;
     lastmulti[0] = 0;
     pmask = 0ul;
@@ -504,7 +654,8 @@ int DictionaryDatabase::StartConsult(char *pat,
     printf("Wild Floats %d   Has Float Ranges %d\n", wildfloats, has_float_ranges);
     for (int i = 0; i < 26; i++)
     {
-        printf("Letter %c  Fixed %d  Max %d\n", i+'A', fixedpool[i], maxpool[i]);
+        printf("Letter %c  Avail in Floating Pool: Min %d  Max %d\n", i+'A',
+			fixedpool[i], maxpool[i]);
     }
     for (int i = 0; i < vlen; i++)
     {
@@ -514,7 +665,7 @@ int DictionaryDatabase::StartConsult(char *pat,
     {
         printf("Var Pool %d: %08X\n", i,  varpool[i]);
     }
-   
+    ShowVector(varvector_in);
 #endif
     return 0;
 }
@@ -541,66 +692,23 @@ int DictionaryDatabase::MustStop()
     return 0;
 }
 
-// iTERATIVE IMPLEMENTATION OF RECURSIVE SEARCH
-
-int DictionaryDatabase::NextSingleWordAllLettersStep(char *line)
+void DictionaryDatabase::ShowProgress(DictionaryNode &N)
 {
-    int rtn = 1; // 1 = got more; 0 = got word, -1 done
-    DictionaryNode N = Nstk[sp];
-#ifdef TEST
-#if 0
-    printf("sp %d  Node %d", sp, nstk[sp]);
-    N.Print();
-#endif
-#else
-    if ((++stepnum%100)==0 && MustStop())
-        return -2;
-#endif
-
-    unsigned long vmask = anchormasks[sp];
-    if ((N.Mask() & vmask) != 0ul)
+    if (sp == (progpoint+1))
     {
-        if (sp == stop) // at the end?
-        {
-	    if (N.IsTerminal())
-	    {
-		GetWord(line, stop);
-		rtn = 0;
-	    }
-        }
-        else if (N.FirstChild() && sp < stop)
-        {
-	    // push on to next letter
-	    ++sp;
-	    Nstk[sp] = GetNode(nstk[sp] = N.FirstChild());
-	    return rtn;
-        }
-	//ReplaceLetter(N);
-    }
-    for (;;)
-    {
-        if (!N.IsLastPeer()) // move to peer
-	{
-	    if (sp == (progpoint+1))
-	    {
-		DictionaryNode n = Nstk[progpoint];
+	DictionaryNode n = Nstk[progpoint];
+        int p;
+	if (numlens == 1)
+	    p = ((n.Index()*26+N.Index()))/6;
+	else
+	    p = ((lennow+1)*(n.Index()*26+N.Index()))/(6*numlens);
 #ifndef TEST
-	        int p = ((n.Index()*26+N.Index()))/6;
-		if (p != progress)
-	            owner->ShowProgress(progress = p);
+	if (p != progress)
+            owner->ShowProgress(progress = p);
 #endif
-	    }
-	    Nstk[sp] = GetNode(++nstk[sp]);
-	    return rtn;
-	}
-	// no more peers; pop the stack
-	if (sp==0) break;
-	--sp;
-	N = Nstk[sp];
-	//ReplaceLetter(N);
     }
-    return -1; // no more
 }
+// iTERATIVE IMPLEMENTATION OF RECURSIVE SEARCH
 
 int DictionaryDatabase::NextStep(char *line)
 {
@@ -608,11 +716,14 @@ int DictionaryDatabase::NextStep(char *line)
     DictionaryNode N = Nstk[sp];
 
 #ifdef TEST
-#if 0
-    printf("%d  sp %d  Node %d", stepnum++, sp, nstk[sp]);
-    N.Print();
-#endif
+    if (debug)
+    {
+        GetWord(line, stop);
+        printf("%d  sp %d  Node %d Line %s ", stepnum++, sp, nstk[sp], line);
+        N.Print();
+    }
 #else
+    ShowProgress(N);
     if ((++stepnum%100)==0 && MustStop())
         return -2;
 #endif
@@ -620,15 +731,41 @@ int DictionaryDatabase::NextStep(char *line)
     if (GrabLetter(N) == 0)
     {
         int wlen = sp-start+1;
+#if 0
+printf("sp %d vecoff %d anchormasks[sp+vecoff] %lX WORDEND %d is_term %d start %d wlen %d\n",
+	sp, vecoff, anchormasks[sp+vecoff],
+	(anchormasks[sp+vecoff]&WORDEND),
+	N.IsTerminal(), start, wlen);
+#endif
         if (sp == stop) // at the end?
         {
 	    if (N.IsTerminal() && wlen>=minlen && swcnt>=mincnt)
 	    {
 		GetWord(line, stop);
+#ifdef VARVECT
+		// Update the set of possible variables
+		if (varvector_out)
+		{
+		    for (int i = 0; i < 26; i++)
+		    {
+		        int var = varset[i];
+		        if (var < 1 || var>26) continue;
+		        if (refcount[--var]>0)
+			{
+			    varvector_out[var] &= ~0x80000000ul;
+			    varvector_out[var] |= (1ul << i);
+			}
+		    }
+		}
+#endif
 		rtn = 0;
 	    }
         }
-	else if (N.IsTerminal() && wlen>=minlen && swcnt<maxcnt)
+	else if (N.IsTerminal() && wlen>=minlen && swcnt<maxcnt
+#ifdef WORDEND
+		&& (!has_wordend_constraints || (anchormasks[sp+vecoff]&WORDEND))
+#endif
+		)
 	{
 	    // push on to next word
 	    laststart = start;
@@ -645,7 +782,12 @@ int DictionaryDatabase::NextStep(char *line)
 	    }
 	    return rtn;
 	}
-        else if (N.FirstChild() && wlen<maxlen)
+        else if (N.FirstChild() && wlen<maxlen
+#ifdef WORDEND
+		&& (!has_wordend_constraints ||
+			(anchormasks[sp+vecoff]&WORDEND) == 0l)
+#endif
+		)
         {
 	    // push on to next letter. If multi-word, enforce
 	    // alphabetic ordering in subsequent words
@@ -670,19 +812,6 @@ int DictionaryDatabase::NextStep(char *line)
     {
         if (!N.IsLastPeer()) // move to peer
 	{
-	    if (sp == (progpoint+1))
-	    {
-		DictionaryNode n = Nstk[progpoint];
-	        int p;
-		if (numlens == 1)
-		    p = ((n.Index()*26+N.Index()))/6;
-		else
-		    p = ((lennow+1)*(n.Index()*26+N.Index()))/(6*numlens);
-#ifndef TEST
-		if (p != progress)
-	            owner->ShowProgress(progress = p);
-#endif
-	    }
 	    Nstk[sp] = GetNode(++nstk[sp]);
 	    return rtn;
 	}
@@ -704,7 +833,12 @@ int DictionaryDatabase::NextStep(char *line)
 #endif
 	    --sp;
 	    N = Nstk[sp];
-	    if (N.FirstChild() && (sp-start+1)<maxlen)
+	    if (N.FirstChild() && (sp-start+1)<maxlen
+#ifdef WORDEND
+		&& (!has_wordend_constraints ||
+			(anchormasks[sp+vecoff]&WORDEND) == 0l)
+#endif
+		)
 	    {
 	        ++sp;
 	        Nstk[sp] = GetNode(nstk[sp] = N.FirstChild());
@@ -728,38 +862,19 @@ int DictionaryDatabase::NextMatch(char *line, int len)
 {
     if (maxlen >= len) maxlen = len-1; // avoid overruns
 #if 1 // set to 0 for low level dict testing
-    // this could all be handled by one case, but for 
-    // speed efficiency we handle the single word 
-    // USEALL case separately...
-
-    if (maxcnt <= 1 && matchtype==USEALL && !has_float_ranges)
+    for (;;)
     {
-        for (;;)
-        {
-//	    DrawDebugText(100, 2, ltoa(++cnt));
-    	    int x = NextSingleWordAllLettersStep(line);
-    	    if (x < 0)
-    	        return x;
-    	    else if (x == 0)
-    	        return ++matches;
-    	}
-    }
-    else
-    {
-        for (;;)
-        {
-//	    ::DrawDebugText(100, 2, ltoa(++cnt));
-    	    int x = NextStep(line);
-    	    if ( x == -2) return -2;
-	        else if (x < 0)
-	        {
-	            if (++lennow >= numlens)
-	            return -1;
-	            InitStack(wlen[lennow], vpos[lennow]);
-	        }
-	        else if (x == 0) 
-	            return ++matches;
-	    }
+//	::DrawDebugText(100, 2, ltoa(++cnt));
+    	int x = NextStep(line);
+    	if ( x == -2) return -2;
+	else if (x < 0)
+	{
+	    if (++lennow >= numlens)
+	        return -1;
+	    InitStack(wlen[lennow], vpos[lennow]);
+	}
+	else if (x == 0) 
+	    return ++matches;
     }
 #else
     DictionaryNode N = GetNode(++start);
@@ -790,6 +905,5 @@ void DictionaryDatabase::Reset()
     lennow = stepnum = progress = matches = 0;
     InitStack(wlen[lennow], vpos[lennow]);
 }
-
 
 

@@ -3,8 +3,8 @@
 // Add a dict info dialog showing word length distributions 
 //	and total number of words.
 
-#define HISTORY
 #define PERSIST
+#define VARVECT
 
 #include "mypilot.h"
 #ifndef TEST
@@ -26,9 +26,20 @@
 #define NumHistoryItems		(10)
 #define NumWordListItems	(11)
 
-#define CFGSZ			(7*sizeof(UInt)+((NumHistoryItems+1)*MAX_PAT_LEN))
+#define CFGSZ			(7*sizeof(UInt)+\
+				(NumHistoryItems+1)*MAX_PAT_LEN+\
+				 27*sizeof(unsigned long)+\
+				 27*sizeof(char))
 
 //---------------------------------------------------------
+
+// useful utility
+
+Form *GetForm(UInt id)
+{
+    Application *a = Application::Instance();
+    return a ? a->GetForm(id) : 0;
+}
 
 class PalmWordDict : public DictionaryDatabase
 {
@@ -51,7 +62,7 @@ int PalmWordDict::MustStop()
     short x, y;
     Boolean pendown;
     EvtGetPen(&x, &y, &pendown);
-    return (pendown && x>120 && y > 143);
+    return (pendown && x>130 && y > 143);
 #endif
 }
 
@@ -61,22 +72,17 @@ class WordList
 #endif
 {
   protected:
-    PalmWordDict &dict;
+    PalmWordDict *dict;
     char line[30];
     int nomore;
     int page;
+    char *assignments;
+
     virtual int NumItems();
 
   public:
     virtual char *GetItem(UInt itemNum);
-    WordList(Form *owner_in, PalmWordDict &dict_in)
-       : List(owner_in, WordFormWordsList),
-         dict(dict_in),
-         nomore(0),
-         page(0)
-    {
-        line[0] = 0;
-    }
+    WordList(class Form *owner_in);
     int NoMore() const
     {
         return nomore;
@@ -84,17 +90,48 @@ class WordList
     void Reset()
     {
         nomore = page = 0;
-        dict.Reset();
+        if (dict) dict->Reset();
     }
     void NextPage()
     {
         ++page;
-	dict.ClearProgress();
+	if (dict) dict->ClearProgress();
     }
-    int Start(char *pat, UInt matchtype, UInt multi,
+    int Start(PalmWordDict *dict_in,
+			char *pat, UInt matchtype, UInt multi,
     			UInt minlength, UInt maxlength,
-			UInt mincount, UInt maxcount);
+			UInt mincount, UInt maxcount,
+			unsigned long *varvector,
+			char *assignments_in);
+    unsigned long *GetVectorIn()
+    {
+        return dict->GetVectorIn();
+    }
+    unsigned long *GetVectorOut()
+    {
+        return dict->GetVectorOut();
+    }
+    char *GetAssignments()
+    {
+        return assignments;
+    }
+    virtual ~WordList()
+    {
+	delete dict;
+    }
 };
+
+WordList::WordList(class Form *owner_in) :
+#ifndef TEST
+   List(owner_in, WordFormWordsList),
+#endif
+   dict(0),
+   nomore(0),
+   page(0),
+   assignments(0)
+{
+    line[0] = 0;
+}
 
 #ifndef TEST
 
@@ -118,7 +155,7 @@ class WordLengthDialog : public RadioGroupDialog
         : RadioGroupDialog(parent_in, 
         		   WordLengthForm,
         		   WordLengthNoLengthLimitCheckbox,
-        		   14,
+        		   16,
         		   val_in,
         		   title_in)
     {}
@@ -137,7 +174,18 @@ class WordCountDialog : public RadioGroupDialog
     {}
 };
 
-#ifdef HISTORY
+class VarAssignDialog : public RadioGroupDialog
+{
+  public:
+    VarAssignDialog(Form *parent_in, UInt val_in)
+        : RadioGroupDialog(parent_in, 
+        		   VarAssignForm,
+        		   VarAssignNoAssignmentCheckbox,
+        		   27,
+        		   val_in,
+        		   "Variable Assignment")
+    {}
+};
 
 class HistoryList : public List
 {
@@ -160,22 +208,29 @@ class HistoryList : public List
 	    char *s = (char *)MemHandleLock(history[idx]);
 	    int isdup = (s && strncmp(s, pat, MAX_PAT_LEN) == 0);
 	    MemHandleUnlock(history[idx]);
-	    if (!isdup) (void)Set(pos, pat, MAX_PAT_LEN);
-	    pos = (pos+1)%NumHistoryItems;
+	    if (!isdup)
+	    {
+	        (void)Set(pos, pat, MAX_PAT_LEN);
+	        pos = (pos+1)%NumHistoryItems;
+	    }
 	}
     }
     virtual int NumItems()
     {
         return NumHistoryItems;
     }
+    char *Get(UInt idx)
+    {
+	HMemCopy(rtn, history[idx], MAX_PAT_LEN);
+	return rtn;
+    }
     virtual char *GetItem(UInt idx)
     {
         UInt p = ((NumHistoryItems-1) + pos-idx)%NumHistoryItems;
-	HMemCopy(rtn, history[p], MAX_PAT_LEN);
-	return rtn;
+	return Get(p);
     }
-    void Save(unsigned char *ptr) const;
-    void Restore(unsigned char *ptr);
+    unsigned char *Save(unsigned char *ptr) const;
+    unsigned char *Restore(unsigned char *ptr);
     virtual ~HistoryList()
     {
         for (int i = 0; i < NumHistoryItems; i++)
@@ -211,26 +266,26 @@ void HistoryList::Set(UInt pos, const char *pat, UInt maxlen)
     }
 }
 
-void HistoryList::Save(unsigned char *ptr) const
+unsigned char *HistoryList::Save(unsigned char *ptr) const
 {
     for (UInt i = 0; i < NumHistoryItems; i++, ptr += MAX_PAT_LEN)
     {
-	strncpy((char*)ptr, (const char *)GetItem(i), MAX_PAT_LEN-1);
+	strncpy((char*)ptr, (const char *)Get(i), MAX_PAT_LEN-1);
 	ptr[MAX_PAT_LEN-1] = 0;
     }
-    *((UInt*)ptr) = pos;
+    *((UInt*)ptr)++ = pos;
+    return ptr;
 }
 
-void HistoryList::Restore(unsigned char *ptr)
+unsigned char *HistoryList::Restore(unsigned char *ptr)
 {
     for (UInt i = 0; i < NumHistoryItems; i++, ptr += MAX_PAT_LEN)
     {
         Set(i, (const char *)ptr, MAX_PAT_LEN);
     }
-    pos = *((UInt*)ptr);
+    pos = *((UInt*)ptr)++;
+    return ptr;
 }
-
-#endif // HISTORY
 
 class MainForm: public Form
 {
@@ -238,17 +293,20 @@ class MainForm: public Form
     UInt minlength, maxlength, mincount, maxcount;
     UInt matchtype, multi;
     char pattern[MAX_PAT_LEN];
-#ifdef HISTORY
     HistoryList history;
+    enum { LOWER, UPPER } letter_case;
+    unsigned long *varvector;
+    char *assignments;
+
     virtual List *GetList()
     {
         return &history;
     }
-#endif
-    enum { LOWER, UPPER } letter_case;
+    void SavePattern();
     void SetModalLabels();
-    virtual void Init();
-    virtual Boolean Activate();
+    void SetWordLengthModalControls();
+    void SetWordCountModalControls();
+    virtual Boolean Open();
     virtual Boolean HandleSelect(UInt objID);
     virtual Boolean HandlePopupListSelect(UInt triggerID,
 					UInt listID,
@@ -259,17 +317,199 @@ class MainForm: public Form
     void Restore();
     void Save();
     MainForm();
+    virtual ~MainForm()
+    {
+        delete [] varvector;
+        delete [] assignments;
+    }
+};
+
+class VariableList : public List
+{
+  protected:
+    unsigned long *varvector_in;
+    unsigned long *varvector_out;
+    char *assignments;
+    char rtn[40];
+  public:
+    VariableList(Form *owner_in)
+	: List(owner_in, VariableFormVariableList),
+	  varvector_in(0),
+	  varvector_out(0),
+	  assignments(0)
+    { }
+    void SetVectors(unsigned long *vector_in,
+    			unsigned long *vector_out,
+			char *assignments_in)
+    {
+        varvector_in = vector_in;
+        varvector_out = vector_out;
+	assignments = assignments_in;
+    }
+    virtual int NumItems()
+    {
+#if 1
+        int rtn = 0;
+	if (varvector_out)
+	    for (int i = 0; i < 27; i++)
+	        if (varvector_out[i]&0x3ffffffful)
+		    ++rtn;
+	return rtn;
+#else
+	return 27;
+#endif
+    }
+    void ResetVector();
+    void ClearAssignments()
+    {
+        if (assignments)
+	    memset(assignments, 0, 27);
+	ResetVector();
+    }
+    UInt Idx2Var(UInt idx)
+    {
+	if (varvector_out)
+	    for (UInt i = 0; i < 27; i++)
+	        if (varvector_out[i]&0x3ffffffful)
+		    if (idx-- == 0)
+		        return i;
+	return 0;
+    }
+    virtual char *GetItem(UInt idx)
+    {
+        int pos = 0;
+#ifdef VARVECT
+        idx = Idx2Var(idx);
+        rtn[0] = (char)('0'+idx/10);
+        rtn[1] = (char)('0'+idx%10);
+	if (idx>26 || varvector_out==0) { rtn[2]=0; return rtn; }
+	if (assignments && assignments[idx])
+	    rtn[2] = '!';
+	else
+            rtn[2] = ((varvector_out[idx]&0x80000000ul)==0) ? '>' : ' ';
+	pos = 3;
+	for (int c = 0; c < 26; c++)
+	    if ((varvector_out[idx] & (1ul<<c)) != 0)
+		rtn[pos++] = (char)(c+'A');
+#endif
+	rtn[pos] = 0;
+	return rtn;
+    }
+    virtual Boolean HandleSelect(UInt selection)
+    {
+        UInt sel = Idx2Var(selection);
+        if (assignments)
+	{
+	    assignments[sel] = (char)VarAssignDialog(owner, assignments[sel]).Run();
+	    if (assignments[sel]==0)
+		varvector_in[sel] = 
+		varvector_out[sel] = 0xfffffffful;
+	    else for (int i = 0; i < 27; i++)
+	    {
+
+	        if (i == sel)
+		    varvector_out[i] = (1ul << (assignments[i]-1));
+		else
+		    varvector_out[i] &= ~(1ul << (assignments[i]-1));
+		varvector_in[i] = varvector_out[i];
+	    }
+	}
+	return List::HandleSelect(selection);
+    }
+    virtual ~VariableList()
+    {
+    }
+};
+
+void ResetVector(unsigned long *varvector, char *assignments)
+{
+#ifdef VARVECT
+    if (varvector)
+    {
+	for (int i = 0; i < 27; i++)
+	    varvector[i] = 0xfffffffful;
+	if (assignments)
+	{
+	    for (int i = 0; i < 27; i++)
+	    {
+	        if (assignments && assignments[i]>0)
+	        {
+	            unsigned long mask = 1ul << (assignments[i]-1);
+		    for (int j = 0; j < 27; j++)
+		        varvector[j] &= ~mask;
+		    varvector[i] = mask;
+	        }
+	    }
+	}
+    }
+#endif
+}
+
+void VariableList::ResetVector()
+{
+    ::ResetVector(varvector_in, assignments);
+}
+
+class VariableForm : public Form
+{
+  protected:
+    VariableList list;
+    UInt caller;
+    virtual Boolean HandleSelect(UInt objID)
+    {
+        switch (objID)
+        {
+        case VariableFormDoneButton:
+	    Switch(caller);
+	    return True;
+        case VariableFormClearButton:
+	    list.ClearAssignments();
+	    Switch(caller);
+	    return True;
+        case VariableFormResetButton:
+	    list.ResetVector();
+	    Switch(caller);
+	    return True;
+        }
+	return False;
+    }
+  public:
+    VariableForm()
+        : Form(VariableFormForm),
+          list(this),
+	  caller(MainFormForm)
+    {}
+    void SetVectors(unsigned long *varvector_in,
+    		    unsigned long *varvector_out,
+		    char *assignments)
+    {
+        list.SetVectors(varvector_in, varvector_out, assignments);
+    }
+    void SetCaller(UInt caller_in)
+    {
+        caller = caller_in;
+    }
+    virtual Boolean HandleListSelect(UInt listID, UInt selection)
+    {
+        (void)listID;
+        (void)list.HandleSelect(selection);
+	Draw();
+	return False;
+    }
+    virtual List *GetList()
+    {
+        return &list;
+    }
 };
 
 class WordForm : public Form
 {
   protected:
   
-    PalmWordDict dict;
     WordList list;
+//    PalmWordDict dict;
     
     virtual void Init();
-    virtual Boolean Activate();
     virtual Boolean Open();
     virtual Boolean HandleSelect(UInt objID);
     virtual Boolean Update();
@@ -278,8 +518,8 @@ class WordForm : public Form
   
     WordForm()
         : Form(WordFormForm),
-          dict(this),
-          list(this, dict)
+  //        dict(this),
+          list(this)
     { 
     }
     void EnableNextButton()
@@ -298,11 +538,15 @@ class WordForm : public Form
         return &list;
     }
     int Start(CharPtr pat, UInt matchtype, UInt multi,
-    			UInt minlength, UInt maxlength, 
-			UInt mincount, UInt maxcount)
+    	      	UInt minlength, UInt maxlength, 
+	      	UInt mincount, UInt maxcount,
+		unsigned long *varvector,
+		char *assignments)
     {
-        return list.Start(pat, matchtype, multi, minlength, maxlength,
-      			mincount, maxcount);
+        return list.Start(0 /*&dict*/,
+        		pat, matchtype, multi, minlength, maxlength,
+      			mincount, maxcount, varvector,
+			assignments);
     }
 };
 
@@ -311,11 +555,15 @@ class PalmWordApplication : public Application
   protected:
     MainForm mainform;
     WordForm wordform;
+    VariableForm variableform;
     virtual Form *TopForm();
     virtual void Stop();
   public:
     PalmWordApplication();
     virtual Form *GetForm(UInt formID);
+    virtual ~PalmWordApplication()
+    {
+    }
 };
 
 #endif // TEST
@@ -323,13 +571,31 @@ class PalmWordApplication : public Application
 
 //---------------------------------------------------------
 
-int WordList::Start(char *pat, UInt matchtype, UInt multi,
+int WordList::Start(PalmWordDict *dict_in,
+			char *pat, UInt matchtype, UInt multi,
 			UInt minlength, UInt maxlength, 
-			UInt mincount, UInt maxcount)
+			UInt mincount, UInt maxcount,
+			unsigned long *varvector,
+			char *assignments_in)
 {
-    if (dict.StartConsult(pat, (int)matchtype, (int)multi,
+    assignments = assignments_in;
+#if 0
+    dict = dict_in;
+#else
+    (void)dict_in;
+    // test dynamic allocation of dict
+    if (dict == 0)
+#ifdef TEST
+        dict = new PalmWordDict();
+#else
+        dict = new PalmWordDict(owner);
+#endif
+#endif
+    if (dict == 0 ||
+	dict->StartConsult(pat, (int)matchtype, (int)multi,
         				(int)minlength, (int)maxlength,
-        				(int)mincount, (int)maxcount) != 0)
+        				(int)mincount, (int)maxcount,
+					varvector) != 0)
     {
         nomore = 1;
         return -1;
@@ -348,9 +614,9 @@ char *WordList::GetItem(UInt itemNum)
     int x;
     (void)itemNum;
     line[0] = line[MAX_PAT_LEN-1] = 0;
-    if (!nomore && (x = dict.NextMatch(line, MAX_PAT_LEN)) < 0)
+    if (!nomore && dict && (x = dict->NextMatch(line, MAX_PAT_LEN)) < 0)
     {
-        strcpy(line, ltoa(dict.Matches()));
+        strcpy(line, ltoa(dict->Matches()));
         strcat(line, " matches");
         if (x == -2) strcat(line, "(interrupted)");
         nomore = 1;
@@ -365,39 +631,46 @@ char *WordList::GetItem(UInt itemNum)
 
 #ifdef TEST
 
+int debug = 0;
+
 int main(int argc, char **argv)
 {
     PalmWordDict dict;
-    WordList list(0, dict);
-    list.Start((argc==2 ? argv[1] : ":.:"), USEALL, 0, 0, 0, 0, 0);
-    int i = 0;
+    WordList list(0);
+    int typ = USEALL, multi = 0;
+#ifdef VARVECT
+    unsigned long varvector[27];
+    memset((char*)varvector, ((char)0xff), (unsigned)(27*sizeof(varvector[0])));
+#endif
+    for (int i = 1; i < argc; i++)
+    {
+        if (argv[i][0] == '-')
+	{
+	    switch (argv[i][1])
+	    {
+	    case 'a': typ = USEALL; break;
+	    case 'p': typ = PREFIX; break;
+	    case 's': typ = SUFFIX; break;
+	    case 'm': multi = 1; break;
+	    case 'D': ++debug; break;
+	    }
+	}
+	else
+	{
+	    PalmWordDict dict;
+    	    list.Start(&dict, argv[i], typ, multi, 0, 0, 0, 0, varvector, 0);
+	    break;
+	}
+    }
+    int w = 0;
     while (!list.NoMore())
     {
-        puts(list.GetItem((UInt)(i++)));
+        puts(list.GetItem((UInt)(w++)));
     }
+    ShowVector(varvector);
 }
 
 #else
-
-//------------------------------------------------------------------------
-
-PalmWordApplication::PalmWordApplication()
-  : Application(), mainform(), wordform()
-{
-//    MemSetDebugMode(memDebugModeCheckOnAll);
-}
-
-Form *PalmWordApplication::GetForm(UInt formID)
-{
-    switch (formID)
-    {
-    case MainFormForm:
-        return &mainform;
-    case WordFormForm:
-	return &wordform;
-    }
-    return 0;
-}
 
 //------------------------------------------------------------------------
 
@@ -405,13 +678,42 @@ MainForm::MainForm()
     : Form(MainFormForm),
       minlength(0), maxlength(0), mincount(0), maxcount(0),
       matchtype(USEALL), multi(0),
-#ifdef HISTORY
       history(this),
-#endif
+      varvector(0),
+      assignments(0),
       letter_case(UPPER)
 {
     pattern[0] = 0;
-    Restore();
+#ifdef VARVECT
+    varvector = new unsigned long[27];
+    if (varvector)
+        memset((char*)varvector, (char)0xff, 27*sizeof(long));
+    assignments = new char[27];
+    if (assignments)
+        memset((char*)assignments, 0, 27);
+#else
+    varvector = 0;
+    assignments = 0;
+#endif
+}
+
+void MainForm::SetWordLengthModalControls()
+{
+    int cando = (multi || matchtype != USEALL);
+    if (!cando) minlength = maxlength = 0;
+    SetControlLabel(MainFormMinLengthSelTrigger, DictionaryDatabase::LimitName(minlength));
+    SetControlLabel(MainFormMaxLengthSelTrigger, DictionaryDatabase::LimitName(maxlength));
+    EnableControl(MainFormMinLengthSelTrigger, cando);
+    EnableControl(MainFormMaxLengthSelTrigger, cando);
+}
+
+void MainForm::SetWordCountModalControls()
+{
+    if (!multi) mincount = maxcount = 0;
+    SetControlLabel(MainFormMinCountSelTrigger, DictionaryDatabase::LimitName(mincount));
+    SetControlLabel(MainFormMaxCountSelTrigger, DictionaryDatabase::LimitName(maxcount));
+    EnableControl(MainFormMinCountSelTrigger, (int)multi);
+    EnableControl(MainFormMaxCountSelTrigger, (int)multi);
 }
 
 void MainForm::SetModalLabels()
@@ -419,11 +721,9 @@ void MainForm::SetModalLabels()
     SetCheckBox(MainFormMultiCheckbox, multi);
     SetField(MainFormPatternField, pattern);
     SetControlLabel(MainFormMatchTypeSelTrigger, DictionaryDatabase::MatchTypeName(matchtype));
-    SetControlLabel(MainFormMinLengthSelTrigger, DictionaryDatabase::LimitName(minlength));
-    SetControlLabel(MainFormMaxLengthSelTrigger, DictionaryDatabase::LimitName(maxlength));
-    SetControlLabel(MainFormMinCountSelTrigger, DictionaryDatabase::LimitName(mincount));
-    SetControlLabel(MainFormMaxCountSelTrigger, DictionaryDatabase::LimitName(maxcount));
-    SetControlLabel(MainFormCaseButton, (letter_case==LOWER?"Floating Mode":"Anchored Mode"));
+    SetWordCountModalControls();
+    SetWordLengthModalControls();
+    SetControlLabel(MainFormCaseButton, (letter_case==LOWER?"Floating":"Anchored"));
     FrmSetFocus(frm, FrmGetObjectIndex(frm, MainFormPatternField));
     Boolean caps, num, aut;
     Word temp;
@@ -432,44 +732,38 @@ void MainForm::SetModalLabels()
     GrfSetState(caps, num, 0);
 }
 
-void MainForm::Init()
+Boolean MainForm::Open()
 {
-    Form::Init();
-#ifdef HISTORY
-    history.Init();
-#endif
+    SetModalLabels();
+    return Form::Open();
 }
 
-Boolean MainForm::Activate()
+void MainForm::SavePattern()
 {
-    if (Form::Activate())
+    CharPtr pat = ReadField(MainFormPatternField);
+    if (pat && pat[0])
     {
-        SetModalLabels();
-#ifdef HISTORY
-	return history.Activate();
-#else
-	ControlPtr b = (ControlPtr)GetObject(MainFormHistoryPopTrigger);
-        if (b) CtlSetUsable(b, 0);
-        return True;
-#endif
+        strncpy(pattern, (const char *)pat, MAX_PAT_LEN-1);
+        pattern[MAX_PAT_LEN-1] = 0;
     }
-    return False;
 }
 
 Boolean MainForm::HandleSelect(UInt objID)
 {
-    CharPtr pat;
     switch (objID)
     {
     case MainFormMatchTypeSelTrigger:
     	matchtype = MatchTypeDialog(this, matchtype).Run();
 	SetControlLabel(MainFormMatchTypeSelTrigger, DictionaryDatabase::MatchTypeName(matchtype));
+	SetWordLengthModalControls();
 	break;
     case MainFormMinLengthSelTrigger:
+        //if (matchtype == USEALL) break;
 	minlength = WordLengthDialog(this, minlength, "Min Word Length").Run();
 	SetControlLabel(MainFormMinLengthSelTrigger, DictionaryDatabase::LimitName(minlength));
 	break;
     case MainFormMaxLengthSelTrigger:
+        //if (matchtype == USEALL) break;
 	maxlength = WordLengthDialog(this, maxlength, "Max Word Length").Run();
 	SetControlLabel(MainFormMaxLengthSelTrigger, DictionaryDatabase::LimitName(maxlength));
 	break;
@@ -483,11 +777,21 @@ Boolean MainForm::HandleSelect(UInt objID)
 	break;
     case MainFormCaseButton: // toggle case and labels
 	letter_case = (letter_case==LOWER) ? UPPER : LOWER;
+	SavePattern();
 	SetModalLabels();
 	break;
     case MainFormClearButton:
         ClearField(MainFormPatternField);
 	pattern[0] = 0;
+        break;
+    case MainFormBreakButton:
+        InsertInField(MainFormPatternField, '|');
+        break;
+    case MainFormSpaceButton:
+        InsertInField(MainFormPatternField, ' ');
+        break;
+    case MainFormSlashButton:
+        InsertInField(MainFormPatternField, '/');
         break;
     case MainFormWildButton:
         InsertInField(MainFormPatternField, (letter_case == LOWER) ? '.' : ':');
@@ -508,36 +812,30 @@ Boolean MainForm::HandleSelect(UInt objID)
         InsertInField(MainFormPatternField, '-');
         break;
     case MainFormNegateButton:
-        InsertInField(MainFormPatternField, '!');
+        InsertInField(MainFormPatternField, '^');
         break;
     case MainFormMultiCheckbox:
         multi = !multi;
+	SetWordCountModalControls();
 	break;
     case MainFormGoButton:
-	pat = ReadField(MainFormPatternField);
-	if (pat && pat[0])
+	SavePattern();
+	if (pattern[0])
 	{
-	    strncpy(pattern, (const char *)pat, MAX_PAT_LEN-1);
-	    pattern[MAX_PAT_LEN-1] = 0;
-	    if (pattern[0])
-	    {
-#ifdef HISTORY
-	        history.Add(pattern);
-#endif
-	        Save();
-	        Application *a = Application::Instance();
-                WordForm *wordform = a ? (WordForm*)a->GetForm(WordFormForm) : 0;
-                if (wordform)
-                {
-                    if (wordform->Start(pattern, matchtype, multi, 
+	    history.Add(pattern);
+	    Save();
+            WordForm *wordform = (WordForm*)::GetForm(WordFormForm);
+            if (wordform)
+            {
+                if (wordform->Start(pattern, matchtype, multi, 
 		    			minlength, maxlength,
-                     			mincount, maxcount) == 0)
-		        wordform->PostLoadEvent();
-		    else
-		        FrmAlert(NoDictBoxAlert); 
-                }
+                			mincount, maxcount, varvector,
+					assignments) == 0)
+		    wordform->PostLoadEvent();
+		else
+		    FrmAlert(NoDictBoxAlert); 
             }
-	}
+        }
 	break;
     default:
 	return False;
@@ -551,22 +849,43 @@ Boolean MainForm::HandlePopupListSelect(UInt triggerID,
 {
     (void)triggerID;
     (void)listID;
-#ifdef HISTORY
     const char *text = history.GetItem(selection);
     if (text) strcpy(pattern, text);
     SetControlLabel(MainFormHistoryPopTrigger, "History");
     DrawControl(MainFormHistoryPopTrigger);
-#endif
     SetModalLabels();
     return True; 
 }
 
 Boolean MainForm::HandleMenu(UInt menuID)
 {
+    VariableForm *f;
     switch(menuID)
     {
     case HelpAboutPalmWord:
         FrmAlert(AboutBoxAlert);
+        return true;
+    case EditClearAssignments:
+#ifdef VARVECT
+	if (assignments)
+	    memset((char*)assignments, 0, 27);
+#endif
+	// fall through
+    case EditResetConstraints:
+#ifdef VARVECT
+	::ResetVector(varvector, assignments);
+#endif
+        return true;
+    case EditShowConstraints:
+#ifdef VARVECT
+	f = (VariableForm*)GetForm(VariableFormForm);
+	if (f) 
+	{
+	    f->SetVectors(varvector, varvector, assignments);
+	    f->SetCaller(MainFormForm);
+	    Switch(VariableFormForm);
+	}
+#endif
         return true;
     case EditUndo:
     case EditCut:
@@ -632,13 +951,21 @@ void MainForm::Restore()
 	        multi = *((UInt*)lp)++;
 	    	strncpy(pattern, (const char *)lp, MAX_PAT_LEN);
 	    	pattern[MAX_PAT_LEN-1] = 0;
-#ifdef HISTORY
 		lp += MAX_PAT_LEN;
-		history.Restore(lp);
+		lp = history.Restore(lp);
+#ifdef VARVECT
+		if (varvector)
+		    for (int i = 0; i < 27; i++)
+	                varvector[i] = *((unsigned long*)lp)++;
+		if (assignments)
+		    for (int i = 0; i < 27; i++)
+	                assignments[i] = *((char *)lp)++;
 #endif
-		// still to do - WordForm stack context
 	    }
+
 	    MemHandleUnlock(h);
+	    if (matchtype == ALL)
+		minlength = maxlength = 0;
 	}
     }
 #endif
@@ -674,10 +1001,17 @@ void MainForm::Save()
 	    *((UInt*)lp)++ = matchtype;
 	    *((UInt*)lp)++ = multi;
 	    strncpy((char *)lp, (const char *)pat, MAX_PAT_LEN);
-#ifdef HISTORY
 	    lp += sizeof(pattern);
-	    history.Save(lp);
+	    lp = history.Save(lp);
+#ifdef VARVECT
+ 	    if (varvector)
+		for (int i = 0; i < 27; i++)
+	            *((unsigned long*)lp)++ = varvector[i];
+		if (assignments)
+		    for (int i = 0; i < 27; i++)
+	                *((char *)lp)++ = assignments[i];
 #endif
+
 	    // still to do - WordForm stack context
 	    config.WriteRecord(dp, lpbuf, CFGSZ); 
 	}
@@ -693,22 +1027,13 @@ void WordForm::Init()
 {
     Form::Init();
     EnableNextButton();
-    list.Init();
-}
-
-Boolean WordForm::Activate()
-{
-    if (Form::Activate())
-        return list.Activate();
-    return False;
 }
 
 Boolean WordForm::Open()
 {
     if (Form::Open())
     {
-        ControlPtr cm = (ControlPtr)GetObject(WordFormStopButton);
-        if (cm) CtlDrawControl(cm);
+        DrawControl(WordFormStopButton);
         ClearProgress();
 	return True;
     }
@@ -743,6 +1068,7 @@ void WordForm::ShowDebug(int sp, unsigned long n)
 
 Boolean WordForm::HandleSelect(UInt objID)
 {
+    VariableForm *f;
     switch (objID)
     {
     case WordFormNewButton:
@@ -761,6 +1087,19 @@ Boolean WordForm::HandleSelect(UInt objID)
 	ClearProgress();
 	PostUpdateEvent();
 	return true;
+    case WordFormVarsButton:
+	f = (VariableForm*)GetForm(VariableFormForm);
+	if (f) 
+	{
+	    list.Reset();
+	    EnableNextButton();
+	    ClearProgress();
+	    f->SetVectors(list.GetVectorIn(), list.GetVectorOut(),
+	    			list.GetAssignments());
+	    f->SetCaller(WordFormForm);
+	    Switch(VariableFormForm);
+	}
+        return true;
     }
     return false;
 }
@@ -769,6 +1108,32 @@ Boolean WordForm::Update()
 {
     list.Erase();
     return Form::Update();
+}
+
+//------------------------------------------------------------------------
+
+PalmWordApplication::PalmWordApplication()
+  : Application(),
+    mainform(),
+    wordform(),
+    variableform()
+{
+//    MemSetDebugMode(memDebugModeCheckOnAll);
+    mainform.Restore();
+}
+
+Form *PalmWordApplication::GetForm(UInt formID)
+{
+    switch (formID)
+    {
+    case MainFormForm:
+        return &mainform;
+    case WordFormForm:
+	return &wordform;
+    case VariableFormForm:
+	return &variableform;
+    }
+    return 0;
 }
 
 Form *PalmWordApplication::TopForm()
@@ -789,6 +1154,5 @@ DWord RunApplication(Word cmd, Ptr cmdPBP, Word launchflags)
 }
 
 #endif // TEST
-
 
 

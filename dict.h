@@ -11,9 +11,12 @@
 #define CONSONANTS  (ALL - VOWELS)
 #define MAXPATLEN   (30)
 
-char *MatchTypeName(UInt t);
-char *LimitName(UInt n);
+#define VARNUM		(0x80000000ul)
+#define WORDEND		(0x40000000ul)
 
+const char *ltoa(unsigned long l);
+
+//#define NodesPerRecord		1000 // version 1.6 and befor
 #define NodesPerRecord		1000
 #define DictDBType		'dict'
 
@@ -27,6 +30,8 @@ class DictionaryDatabase
 #endif
     int nodesize;
     int allocpool[26], fixedpool[26], maxpool[26], need[26];
+    int varset[26], refcount[27];
+    unsigned long varvector_in[27], *varvector_out;
     // node stack for non-recursive matching
     unsigned long nstk[30];
     int sp, start, laststart, stop, vecoff, swcnt;
@@ -41,7 +46,9 @@ class DictionaryDatabase
     char lastmulti[80];
     int progpoint;
     int has_float_ranges;
+    int simple_search;
     int has_place_constraints;
+    int has_wordend_constraints;
 
 #ifdef TEST // UNIX dawg is differnt for i386
 #define TVSH	29
@@ -61,6 +68,14 @@ class DictionaryDatabase
   public:
     static const char *MatchTypeName(UInt t);
     static const char *LimitName(UInt n);
+    unsigned long *GetVectorIn()
+    {
+        return varvector_in;
+    }
+    unsigned long *GetVectorOut()
+    {
+        return varvector_out;
+    }
     unsigned long LetterMask(char c)
     {
         return (1ul << (c-'A'));
@@ -125,12 +140,15 @@ class DictionaryDatabase
 #endif
     int current_recnum;
 
+    void ShowProgress(DictionaryNode &N);
     int FindPoolAllocation(unsigned pos, int tot, int wilds,
 			   unsigned long pmask = 0xfffffffful);
     int RemoveFromPool(int c);
     void ReplaceInPool(int c);
     int GrabLetter(DictionaryNode &n);
     void ReplaceLetter(DictionaryNode &n);
+
+    unsigned long NextPatternElt(char *&pat, int &is_float, int &is_single);
     char *NextPat(char *pat, int pos);
     void InitStack(int l, int first_vec);
     void GetWord(char *word, int stacklen);
@@ -142,7 +160,8 @@ class DictionaryDatabase
     int StartConsult(char *pat, int type_in = USEALL,
     			int multi_in = 0,
     			int minlen_in=0, int maxlen_in=0, 
-			int mincnt_in=0, int maxcnt_in=0);
+			int mincnt_in=0, int maxcnt_in=0,
+			unsigned long *varvector=0);
     int NextMatch(char *line, int len);
     void Reset();
     inline int Matches() const
@@ -157,9 +176,10 @@ class DictionaryDatabase
     {
 #ifdef TEST
 	fp = fopen("dawg", "r");
+	if (fp == 0) perror("fopen");
 	return fp ? 1 : 0;
 #else
-        return Database::Open(DictDBType);
+        return Database::Open(DictDBType, dmModeReadOnly);
 #endif
     }
 #ifdef TEST
@@ -170,7 +190,10 @@ class DictionaryDatabase
     virtual ~DictionaryDatabase();
 };
 
+#ifdef TEST
+void ShowVector(unsigned long *vec);
 #endif
 
+#endif
 
 
