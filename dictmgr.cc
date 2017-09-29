@@ -1,5 +1,7 @@
 // Same as old way, but converted to C++
 
+#define OLD_GETNODE // for now
+
 #include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -196,9 +198,14 @@ class NodePool
     void Merge(int pos = 0);
     void ShowStats() const
     {
+#if 0
 	printf("Max space used: %%%5.2f,  Final space used %%%5.2f\n",
 		(double)topnode*100./(double)MAXNODES,
 		(double)usednodes*100./(double)MAXNODES);
+#else
+	printf("Max space used: %%%5.2f\n",
+		(double)topnode*100./(double)MAXNODES);
+#endif
     }
     void SaveState(char *word, char *lastword);
     int RestoreState(char *word, char *lastword);
@@ -337,12 +344,9 @@ void NodePool::WritePalmDB(FILE *dawg,
 				const char *srcname)
 {
     char nbuf[32];
-    if (name==0)
-    {
-        sprintf(nbuf, "%.16s (%d words)",
-		(srcname?srcname:"unknown"), wcnt);
-    }
-    else strncpy(nbuf, name, 31);
+    if (name==0) name = srcname;
+    sprintf(nbuf, "%.16s (%d words)",
+		((name&&name[0])?name:"unknown"), wcnt);
     nbuf[31] = 0;
 
     // write out the headers
@@ -632,7 +636,7 @@ static void useage(void)
 {
     fprintf(stderr,"Usage: dictmgr [-n <name>] [-m <minlen>] [-M <maxlen>] [-o <OPDB>] [<IWL> ...] (build dictionary)\n");
     fprintf(stderr,"or:    dictmgr -l [-o <OWL>] <IPDB>  (list dictionary)\n");
-    fprintf(stderr,"or:    dictmgr -R <EmailAddress>] <HotSyncName>  (register programs)\n");
+//    fprintf(stderr,"or:    dictmgr -R <EmailAddress>] <HotSyncName>  (register programs)\n");
     fprintf(stderr,"\n\nIPDB and OPDB represent input and output .pdb dictionary databases.\n");
     fprintf(stderr,"IWL and OWL represent input and output word list files.\n");
     fprintf(stderr,"\n\nIf no word list file is specified for building, standard input is used.\n");
@@ -643,9 +647,9 @@ static void useage(void)
     fprintf(stderr,"merged. The -m and -M flags allow you to select which subset of words\n");
     fprintf(stderr,"should be included based on word length restrictions.\n");
     fprintf(stderr,"At most 16 input word lists can be merged into one\n");
-    fprintf(stderr,"\nWhen registering, you will be prompted for a key. A pwreg.pdb file\n");
-    fprintf(stderr,"will be created, which you should install on your Palm device.\n");
-    fprintf(stderr,"Warning: invalid pwreg.pdb files will cause PalmWord++ to crash!\n");
+//    fprintf(stderr,"\nWhen registering, you will be prompted for a key. A pwreg.pdb file\n");
+//    fprintf(stderr,"will be created, which you should install on your Palm device.\n");
+//    fprintf(stderr,"Warning: invalid pwreg.pdb files will cause PalmWord++ to crash!\n");
     exit(0);
 }
 
@@ -660,6 +664,7 @@ void Dump(int dumplevel, const char *ofname, const char *fname = 0)
     if (ofname) fp = fopen(ofname, "w");
     DictionaryDatabase dict;
     dict.Init(fname);
+    dict.InitDB();
     if (dumplevel>1)
         dict.RawDump(fp ? fp : stdout);
     else
@@ -936,5 +941,3 @@ static void HandleSignal(int signo)
     fprintf(stderr, "Interrupted!\n");
 }
 
-
-

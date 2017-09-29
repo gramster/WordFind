@@ -16,8 +16,8 @@
 
 const char *ltoa(unsigned long l);
 
-#define NodesPerRecord		1000 // version 1.8 and befor
-//#define NodesPerRecord		256 // version 2.0 and after
+//#define NodesPerRecord		1000 // version 1.8 and befor
+#define NodesPerRecord		4096
 #define DictDBType		'dict'
 
 class VariableSet
@@ -108,6 +108,8 @@ class DictionaryDatabase
 {
 #ifdef IS_FOR_PALM
     class Form *owner;
+#else
+    char dbname[32];
 #endif
     int nodesize;
     int allocpool[26], fixedpool[26], maxpool[26], need[26];
@@ -148,6 +150,7 @@ class DictionaryDatabase
 #define FIRSTNODE	(1l)
 #endif
 
+    virtual Boolean OnOpen();
   public:
     static const char *MatchTypeName(UInt t);
     static const char *LimitName(UInt n);
@@ -211,6 +214,15 @@ class DictionaryDatabase
     {
         return (int)(n/NodesPerRecord);
     }
+
+#ifndef OLD_GETNODE
+    VoidHand *handles;
+    unsigned char **records;
+    void InitRecords();
+  public:
+    void FreeRecords();
+  protected:
+#endif
     
     unsigned char *current_record;
 #ifdef IS_FOR_PALM
@@ -237,11 +249,13 @@ class DictionaryDatabase
     int NextSingleWordAllLettersStep(char *line);
     int NextStep(char *line);
     DictionaryNode GetNode(unsigned long n);
+    void Reinitialise();
     virtual int MustStop();
 #ifdef DUMP
     void RecursiveDump(int pos, long n, FILE *ofp);
 #endif
   public:
+    void InitDB();
     int StartConsult(char *pat, int type_in = USEALL,
     			int multi_in = 0,
     			int minlen_in=0, int maxlen_in=0, 
@@ -295,5 +309,3 @@ void ShowVector(unsigned long *vec);
 
 #endif
 
-
-

@@ -7,6 +7,7 @@
 #include <time.h>
 #include <sys/stat.h>
 
+#define TERMINAL	0x40000000u
 #define NodesPerRecord	(1000)
 
 main(int argc, char **argv)
@@ -171,10 +172,14 @@ main(int argc, char **argv)
 			}
 			fwrite(longbuf, sizeof(char), nodesize, ofp);
 			nodenum++;
-			printf("\b\b\b%2d%%", (nodenum*100)/nnodes); fflush(stdout);
-#if 0
-			printf("%ld : %08lx %u %u %u %u\n",
-				nodenum, node, 
+//			printf("\b\b\b%2d%%", (nodenum*100)/nnodes); fflush(stdout);
+#if 1
+			printf("%ld : %c%c '%c' %08lx [%02x %02x %02x %02x]\n",
+				nodenum, 
+				((node&TERMINAL)?'T':' '),
+				' ',
+				' ',
+				node, 
 				longbuf[0],
 				longbuf[1],
 				longbuf[2],
@@ -185,7 +190,10 @@ main(int argc, char **argv)
 		    // pad the last record
 		    memset(longbuf, 0, 4);
 		    while ((nodenum++)%NodesPerRecord)
+		    {
+		        printf("%ld PAD\n", nodenum);
 			fwrite(longbuf, sizeof(char), nodesize, ofp);
+		    }
 	            fclose(ofp);
 	        }
 	        fclose(ifp);

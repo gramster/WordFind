@@ -42,7 +42,12 @@ class Database
     ULong type;
     UInt mode;
     ULong creator;
+    UInt card;
+    ULong id;
     int numrecords;
+    char dbname[32];
+    virtual Boolean OnOpen();
+    Boolean Init(DmOpenRef db_in);
   public:
     Database()
     {}
@@ -58,8 +63,25 @@ class Database
     {
         return numrecords;
     }
+    void SetCard(UInt c)
+    {
+        card = c;
+    }
+    void SetID(ULong i)
+    {
+        id = i;
+    }
+    UInt Card() const
+    {
+        return card;
+    }
+    ULong ID() const
+    {
+        return id;
+    }
     Boolean Open(ULong type, UInt mode = dmModeReadWrite,
     				ULong creator = MY_CREATOR_ID);
+    Boolean Open(UInt card, LocalID id, UInt mode = dmModeReadWrite);
     Boolean Create(CharPtr name, ULong type, UInt mode = dmModeReadWrite, 
     				ULong creator = MY_CREATOR_ID);
     Boolean OpenOrCreate(CharPtr name, ULong type, UInt mode = dmModeReadWrite,
@@ -98,8 +120,22 @@ class Database
     {
 	DmWrite(dptr, offset, ptr, size); 
     }
+    const char *Name() const
+    {
+        return dbname;
+    }
     ~Database();
 };
+
+
+typedef void (*ListHandler)(UInt, RectanglePtr, CharPtr*);
+
+// it seems the handler has no way of knowing the list ID, so that makes it tricky to
+// have one handler for all lists. Instead, we use the next macro in each leaf class
+// in the List hierarchy to supply a handler for that class.
+
+#define LISTHANDLER(lid) static void ListDrawEventHandler(UInt idx, RectanglePtr bounds, CharPtr *data) { (void)data; Application::Instance()->DrawListItem(lid, idx, bounds); } \
+			 virtual void InstallDrawHandler() { LstSetDrawFunction(lst, ListDrawEventHandler); }
 
 class List
 {
@@ -108,7 +144,7 @@ class List
     ListPtr lst;
     class Form *owner;
 
-    static void ListDrawEventHandler(UInt idx, RectanglePtr bounds, CharPtr *data);
+    virtual void InstallDrawHandler() = 0;
     virtual int NumItems();
     virtual char *GetItem(UInt idx);
     
@@ -120,9 +156,37 @@ class List
     }
     virtual void Init();
     virtual Boolean Activate();
+    virtual void DrawItem(UInt idx, RectanglePtr bounds);
     virtual Boolean HandleSelect(UInt selection);
     void Erase();
     virtual ~List();
+};
+
+class DatabaseList : public List
+{
+  protected:
+    ULong type;
+    ULong creator;
+    char **dbnames;
+    UInt *cards;
+    LocalID *ids;
+    int numdbs;
+    char *name_out;
+    Database *db;
+
+    virtual int NumItems();
+    virtual char *GetItem(UInt idx);
+    void Reset();
+  public:
+    DatabaseList(class Form *owner_in, ULong creator_in, ULong type_in,
+    		char *name_out_in = 0, Database *db_in = 0,
+		UInt listid_in = 0);
+    virtual void InstallDrawHandler() = 0;
+    virtual void Init();
+    virtual Boolean Activate();
+    virtual Boolean HandleSelect(UInt selection);
+    void GetName(UInt selection, char *namebuf);
+    virtual ~DatabaseList();
 };
 
 class Form
@@ -182,7 +246,7 @@ class Form
     VoidPtr GetObject(UInt resid);
     Boolean IsActive() const;
     virtual Boolean Activate(); // pre-draw time
-    virtual List *GetList();
+    virtual List *GetList(UInt lidx);
     virtual void ShowProgress(int p);
     virtual ~Form();
 };
@@ -257,6 +321,8 @@ class Application
     static Application *Instance();
     static Boolean HideSecretRecords();
    
+    void DrawListItem(UInt lidx, UInt idx, RectanglePtr bounds);
+
     virtual Form *GetForm(UInt formID);
     Form *GetForm() const
     {

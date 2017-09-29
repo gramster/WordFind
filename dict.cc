@@ -82,103 +82,57 @@ void DictionaryDatabase::Init()
 void DictionaryDatabase::Init(const char *fname)
 #endif // IS_FOR_PALM
 {
-#ifdef IS_FOR_PALM
-    owner = 0;
-#endif
     vars = 0;
+#ifndef OLD_GETNODE
+    handles = 0;
+    records = 0;
+#endif
     current_record = 0;
     current_recnum = -1;
-    sp = 0;
-    start = 0;
-    laststart = 0;
-    stop = 0;
-    vecoff = 0;
-    swcnt = 0;
-    stepnum = 0;
-    matches = 0;
-    progress = 0;
-    pmask = 0;
-    vlen = 0;
-    plen = 0;
-    wildfloats = 0;
-    vtot = 0;
     matchtype = 0;
     mincnt = 0;
     maxcnt = 0;
     minlen = 0;
     maxlen = 0;
     numlens = 0;
-    lennow = 0;
-    progpoint = 0;
-    has_float_ranges = 0;
-    simple_search = 1;
-    has_place_constraints = 0;
-    memset((char*)allocpool, 0, sizeof(allocpool[0])*26);
-    memset((char*)fixedpool, 0, sizeof(fixedpool[0])*26);
-    memset((char*)maxpool, 0, sizeof(maxpool[0])*26);
-    memset((char*)need, 0, sizeof(need[0])*26);
-    memset((char*)nstk, 0, sizeof(nstk[0])*30);
-    memset((char*)starts, 0, sizeof(starts[0])*32);
-    memset((char*)anchormasks, 0, sizeof(anchormasks[0])*MAXPATLEN);
-    memset((char*)varpool, 0, sizeof(varpool[0])*MAXPATLEN);
-    memset((char*)wlen, 0, sizeof(wlen[0])*32);
-    memset((char*)vpos, 0, sizeof(vpos[0])*32);
-    memset((char*)lastmulti, 0, sizeof(lastmulti[0])*80);
-
-    // open the database
 #ifdef IS_FOR_PALM
-    (void)Open();
-    if (db)
+    db = 0;
+    owner = 0;
 #else
-    (void)Open(fname);
-    if (fp)
-#endif // IS_FOR_PALM
-    {
-#ifdef UNIX
-	nodesize = 4;
+    strncpy(dbname, fname, 31);
+    dbname[31]=0;
+    if (current_record==0)
         current_record = new unsigned char[NodesPerRecord*4];
-#else
+    fp = 0;
+#endif
+
+}
+
+Boolean DictionaryDatabase::OnOpen()
+{
 #ifdef IS_FOR_PALM
-        VoidHand h = QueryRecord(0);
-        if (h)
-        {
-	    unsigned char *lp = (unsigned char*)MemHandleLock(h);
-	    if (lp)
-	    {
-	        if (lp[2]==3)
-	            nodesize = 3;
-	        else
-	            nodesize = 4;
-	    }
-            MemHandleUnlock(h);
-        }
+#ifndef OLD_GETNODE
+    FreeRecords();
+    InitRecords();
+#endif
+    return Database::OnOpen();
 #else
-	// find the nodesize in the .pdb file
-	unsigned char v[4];
-	fseek(fp, 76, SEEK_SET);
-	if (fread(v, 2, 1, fp)>0)
-	    numrecords = (v[0]<<8) | v[1];
-	nodeStart = 78 + 8 * numrecords;
-	fseek(fp, nodeStart, SEEK_SET);
-	if (fread(v, 4, 1, fp)>0)
-	    if (v[2]==3)
-	        nodesize = 3;
-	    else
-	        nodesize = 4;
-        current_record = new unsigned char[NodesPerRecord*nodesize];
-#endif // IS_FOR_PALM
-#endif // UNIX
-    }
+    return true;
+#endif
 }
 
 DictionaryDatabase::~DictionaryDatabase()
 {
+#ifdef OLD_GETNODE
     if (current_record) 
 #ifdef IS_FOR_PALM
         MemHandleUnlock(current_handle);
 #else
         delete [] current_record;
 #endif // IS_FOR_PALM
+#else
+        FreeRecords();
+#endif
 }
 
 const char *DictionaryDatabase::MatchTypeName(UInt t)
@@ -226,9 +180,10 @@ DictionaryDatabase::DictionaryNode
 #ifdef DUMP
     gncnt++;
 #endif
-#ifdef UNIX
+#ifdef RAW_DAWG // nodes begin at 0 in dawgs but at 1 in .pdb files
     --n;
-#endif // UNIX
+#endif // RAW_DAWG
+#ifdef OLD_GETNODE
     int rn = Node2Record(n);
     if (current_recnum != rn)
     {
@@ -268,6 +223,10 @@ DictionaryDatabase::DictionaryNode
             current_recnum = -1;
         }
     }
+#else // NEW GETNODE CODE
+    current_recnum = Node2Record(n);
+    current_record = records[current_recnum];
+#endif
     unsigned long v;
     if (current_record == 0)
         v = 0;
@@ -589,6 +548,126 @@ void DictionaryDatabase::InitStack(int l, int first_vec)
     memset((char*)varset, 0, sizeof(varset[0])*26);
 }
 
+void DictionaryDatabase::Reinitialise()
+{
+    progpoint = 0;
+    memset((char*)allocpool, 0, sizeof(allocpool[0])*26);
+    memset((char*)fixedpool, 0, sizeof(fixedpool[0])*26);
+    memset((char*)maxpool, 0, sizeof(maxpool[0])*26);
+    vlen = plen = wildfloats = has_float_ranges = 0;
+    simple_search = 1;
+    has_place_constraints = 0;
+    has_wordend_constraints = 0;
+    pmask = 0ul;
+    lennow = progress = matches = 0;
+    memset((char*)nstk, 0, sizeof(nstk[0])*30);
+    memset((char*)anchormasks, 0, sizeof(anchormasks[0])*MAXPATLEN);
+    memset((char*)varpool, 0, sizeof(varpool[0])*MAXPATLEN);
+    memset((char*)wlen, 0, sizeof(wlen[0])*32);
+    memset((char*)vpos, 0, sizeof(vpos[0])*32);
+    memset((char*)lastmulti, 0, sizeof(lastmulti[0])*80);
+    sp = 0;
+    start = 0;
+    laststart = 0;
+    stop = 0;
+    vecoff = 0;
+    swcnt = 0;
+    stepnum = 0;
+    vtot = 0;
+
+    // open the database
+#ifdef IS_FOR_PALM
+    if (db)
+#else
+    if (fp)
+#endif // IS_FOR_PALM
+    {
+#ifdef RAW_DAWG
+	nodesize = 4;
+#else
+#ifdef IS_FOR_PALM
+        VoidHand h = QueryRecord(0);
+        if (h)
+        {
+	    unsigned char *lp = (unsigned char*)MemHandleLock(h);
+	    if (lp)
+	    {
+	        if (lp[2]==3)
+	            nodesize = 3;
+	        else
+	            nodesize = 4;
+	    }
+            MemHandleUnlock(h);
+        }
+#else
+	// find the nodesize in the .pdb file
+	unsigned char v[4];
+	fseek(fp, 76, SEEK_SET);
+	if (fread(v, 2, 1, fp)>0)
+	    numrecords = (v[0]<<8) | v[1];
+	nodeStart = 78 + 8 * numrecords;
+	fseek(fp, nodeStart, SEEK_SET);
+	if (fread(v, 4, 1, fp)>0)
+	    if (v[2]==3)
+	        nodesize = 3;
+	    else
+	        nodesize = 4;
+#endif // IS_FOR_PALM
+#endif // RAW_DAWG
+    }
+}
+
+#ifndef OLD_GETNODE
+
+void DictionaryDatabase::InitRecords()
+{
+    handles = new VoidHand[numrecords];
+    records = new unsigned char*[numrecords];
+    for (int i = 0; i < numrecords; i++)
+    {
+        handles[i] = db ? QueryRecord((UInt)i) : 0;
+	if (handles[i])
+	    records[i] = (unsigned char*)MemHandleLock(handles[i]);
+	else
+	    records[i] = 0;
+    }
+}
+
+void DictionaryDatabase::FreeRecords()
+{
+    if (handles)
+        for (int i = 0; i < numrecords; i++)
+            MemHandleUnlock(handles[i]);
+    delete [] handles;
+    delete [] records;
+    handles = 0;
+    records = 0;
+}
+
+#endif
+
+void DictionaryDatabase::InitDB()
+{
+#ifdef IS_FOR_PALM
+    if (db == 0)
+    {
+        if (id) Database::Open(card, (LocalID)id, dmModeReadOnly);
+        else Database::Open(DictDBType, dmModeReadOnly);
+//	if (db == 0) return -1;
+    }
+#else
+    if (fp == 0)
+    {
+        Open(dbname);
+    }
+#endif // IS_FOR_PALM
+#ifndef OLD_GETNODE
+    if (records == 0)
+        InitRecords();
+#endif
+    Reinitialise();
+}
+
 int DictionaryDatabase::StartConsult(char *pat,
 				      int type_in,
 				      int multi_in,
@@ -596,32 +675,12 @@ int DictionaryDatabase::StartConsult(char *pat,
 				      int mincnt_in, int maxcnt_in,
 				      VariableSet *vars_in)
 {
-    progpoint = 0;
-#ifdef IS_FOR_PALM
-    if (db == 0)
-    {
-        Open();
-	if (db == 0) return -1;
-    }
-#else
-    if (fp == 0)
-    {
-        Open();
-	if (fp == 0) return -1;
-    }
-#endif // IS_FOR_PALM
+    InitDB();
 #ifdef VARVECT
     vars = vars_in;
     vars->ClearUsed();
 #endif // VARVECT
-    memset((char*)allocpool, 0, sizeof(allocpool[0])*26);
-    memset((char*)fixedpool, 0, sizeof(fixedpool[0])*26);
-    memset((char*)maxpool, 0, sizeof(maxpool[0])*26);
-    vlen = plen = wildfloats = has_float_ranges = 0;
-    simple_search = 1;
     int px = 0;
-    has_place_constraints = 0;
-    has_wordend_constraints = 0;
     while (pat && *pat) pat = NextPat(pat, px++);
 #ifdef WORDEND 
     if (has_wordend_constraints)
@@ -673,7 +732,6 @@ int DictionaryDatabase::StartConsult(char *pat,
     }
     // match=0;
     lastmulti[0] = 0;
-    pmask = 0ul;
     for (int i = 0; i < plen; i++)
         pmask |= (1ul << i);
     if (matchtype==USEALL)
@@ -700,7 +758,6 @@ int DictionaryDatabase::StartConsult(char *pat,
 	}
 	numlens = maxlen-minlen+1;
     }
-    lennow = progress = matches = 0;
     InitStack(wlen[0], vpos[0]);
 #ifndef IS_FOR_PALM
     printf("Mincnt %d Maxcnt %d\n", mincnt, maxcnt);
@@ -992,13 +1049,22 @@ void DictionaryDatabase::RecursiveDump(int pos, long n, FILE *ofp)
 
 void DictionaryDatabase::Dump(FILE *fp)
 {
+#ifndef OLD_GETNODE
+    InitRecords();
+#endif
     RecursiveDump(0, 1l, fp);
+#ifndef OLD_GETNODE
+    FreeRecords();
+#endif
 }
 
 void DictionaryDatabase::RawDump(FILE *fp)
 {
     unsigned long i;
     long numnodes = numrecords * NodesPerRecord;
+#ifndef OLD_GETNODE
+    InitRecords();
+#endif
     fprintf(fp, "Nodes: %ld\n", numnodes);
     for (i=1;i<=numnodes;i++)
     {
@@ -1008,9 +1074,10 @@ void DictionaryDatabase::RawDump(FILE *fp)
 			N.IsLastPeer()?'L':' ',
 			(int)N.Index(), N.Char());
     }
+#ifndef OLD_GETNODE
+    FreeRecords();
+#endif
 }
 
 #endif // DUMP
 
-
-

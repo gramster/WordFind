@@ -66,48 +66,24 @@ Application *Application::instance;
 extern "C" void _exit(int) {} // get around linker error
 #endif
 
-Boolean Database::OnOpen()
-{
-    return True;
-}
-
-Boolean Database::Init(DmOpenRef db_in)
-{
-    strcpy(dbname, "Default");
-    if (db_in)
-    {
-        db = db_in;
-        numrecords = (int)::DmNumRecords(db);
-	if (DmOpenDatabaseInfo(db, &id, 0, 0, &card, 0) == 0)
-	    if (DmDatabaseInfo(card, id, dbname,0,0,0,0,0,0,0,0,0,0) != 0)
-		strcpy(dbname, "Default");
-	        //dbname[0] = 0;
-	return OnOpen();
-    }
-    else
-    {
-        db = 0;
-        numrecords = -1;
-	card = 0;
-	id = 0;
-        return False;
-    }
-}
-
 Boolean Database::Open(ULong type, UInt mode, ULong creator)
 {
     if (!Application::HideSecretRecords())
         mode |= dmModeShowSecret;
-    return Init(::DmOpenDatabaseByTypeCreator(type, creator, mode));
-}
-    
-Boolean Database::Open(UInt c, LocalID i, UInt mode)
-{
-    if (!Application::HideSecretRecords())
-        mode |= dmModeShowSecret;
-    return Init(::DmOpenDatabase(c, i, mode));
+    db = ::DmOpenDatabaseByTypeCreator(type, creator, mode);
+    if (db)
+    {
+        numrecords = (int)::DmNumRecords(db);
+        return True;
+    }
+    else
+    {
+        numrecords = -1;
+        return False;
+    }
 }
 
+    
 Boolean Database::Create(CharPtr name, ULong type, 
 					UInt mode, ULong creator)
 {
@@ -151,9 +127,14 @@ List::List(Form *owner_in, UInt id_in)
 { 
 }
 
-void List::DrawItem(UInt idx, RectanglePtr bounds)
+/* static */
+void List::ListDrawEventHandler(UInt idx, RectanglePtr bounds, 
+				CharPtr *data)
 {
-    char *item = GetItem(idx);
+    (void)data;
+    Form *form = Application::Instance()->GetForm();
+    List *list = form ? form->GetActiveList() : 0;
+    char *item = list ? list->GetItem(idx) : 0;
     if (item) 
     	WinDrawChars(item, StrLen(item), bounds->topLeft.x, bounds->topLeft.y);
 }
@@ -168,7 +149,7 @@ Boolean List::Activate() // owner must be active
     if (lst)
     {
 	LstSetListChoices(lst, (char**)0, (UInt)NumItems());
-	InstallDrawHandler();
+    	LstSetDrawFunction(lst, ListDrawEventHandler);
 	return True;
     }
     return False;
@@ -202,119 +183,6 @@ List::~List()
 
 //-----------------------------------------------------------------
 
-DatabaseList::DatabaseList(class Form *owner_in, 
-			   ULong creator_in, 
-			   ULong type_in,
-			   char *name_out_in,
-			   Database *db_in,
-			   UInt listid_in)
-    : List(owner_in, listid_in),
-    creator(creator_in),
-    type(type_in),
-    dbnames(0),
-    cards(0),
-    ids(0),
-    numdbs(0),
-    name_out(name_out_in),
-    db(db_in)
-{
-    Err x;
-    UInt card;
-    LocalID id;
-    Boolean newsearch = True;
-    DmSearchStateType state;
-    int cnt = 0;
-//    Reset();
-    while ((x = DmGetNextDatabaseByTypeCreator(newsearch, &state, type,
-    						creator, True, &card, &id))==0)
-    {
-        newsearch = False;
-	cnt++;
-    }
-    if (cnt)
-    {
-        dbnames = new char*[cnt];
-        cards = new UInt[cnt];
-        ids = new LocalID[cnt];
-        newsearch = True;
-        while ((x = DmGetNextDatabaseByTypeCreator(newsearch, &state,
-    					type, creator, True,
-					&card, &id)) == 0)
-        {
-            char name[32];
-            newsearch = False;
-	    if (DmDatabaseInfo(card, id, name,0,0,0,0,0,0,0,0,0,0) == 0)
-	    {
-	        dbnames[numdbs] = new char[strlen(name)+1];
-	        if (dbnames[numdbs])
-	        {
-	            cards[numdbs] = card;
-	            ids[numdbs] = id;
-	            strcpy(dbnames[numdbs++], name);
-	        }
-	    }
-        }
-    }
-}
-
-int DatabaseList::NumItems()
-{
-    return numdbs;
-}
-
-char *DatabaseList::GetItem(UInt idx)
-{
-    return (idx>=0 && idx<numdbs) ? dbnames[idx] : "";
-}
-
-void DatabaseList::Init()
-{
-    List::Init();
-}
-
-void DatabaseList::Reset()
-{
-    if (db && db->NumRecords()>=0)
-        db->Close();
-    for (int i = 0; i < numdbs; i++)
-        delete [] dbnames[i];
-    delete [] dbnames;
-    dbnames = 0;
-    delete [] cards;
-    cards = 0;
-    delete [] ids;
-    ids = 0;
-    numdbs = 0;
-}
-
-void DatabaseList::GetName(UInt selection, char *namebuf)
-{
-    strcpy(namebuf, dbnames[selection]);
-}
-
-Boolean DatabaseList::Activate()
-{
-    return List::Activate();
-}
-
-Boolean DatabaseList::HandleSelect(UInt selection)
-{
-    if (name_out) strcpy(name_out, dbnames[selection]);
-    if (db)
-    {
-        db->Close();
-        db->Open(cards[selection], ids[selection], dmModeReadOnly);
-    }
-    return List::HandleSelect(selection);
-}
-
-DatabaseList::~DatabaseList()
-{
-    Reset();
-}
-
-//-----------------------------------------------------------------
-
 Form::Form(UInt id_in)
     : id(id_in), frm(0)
 { 
@@ -328,6 +196,7 @@ void Form::PostHandle(EventType &event)
 void Form::Init()
 {
     frm = ::FrmInitForm(id);
+ // !!    if (GetActiveList()) GetActiveList()->Init();
 }
 
 void Form::ShowProgress(int p)
@@ -463,6 +332,8 @@ Boolean Form::Activate()
 	Application::Instance()->SetActiveForm(this);
         ::FrmSetActiveForm(frm);
         ::FrmSetEventHandler(frm, Form::EventHandler);
+	if (GetActiveList())
+	    return GetActiveList()->Activate(); // !!
         return True;
     }
     return False;
@@ -582,9 +453,8 @@ Boolean Form::Update()
     return False;
 }
 
-List *Form::GetList(UInt lidx)
+List *Form::GetActiveList()
 {
-    (void)lidx;
     return 0;
 }
 
@@ -602,6 +472,8 @@ Boolean Dialog::Activate()
 void Dialog::Init()
 {
     Form::Init();
+//    Application::Instance()->SetActiveForm(this);
+//    ::FrmSetEventHandler(frm, Form::EventHandler);
 }
 
 Boolean Dialog::HandleSelect(UInt objID)
@@ -872,16 +744,6 @@ Application::Application()
 Boolean Application::IsActive(const Form *f)
 {
     return (instance && (instance->GetForm() == f));
-}
-
-void Application::DrawListItem(UInt lidx, UInt idx, RectanglePtr bounds)
-{
-    Form *f = GetForm();
-    if (f)
-    {
-        List *l = f->GetList(lidx);
-	if (l) l->DrawItem(idx, bounds);
-    }
 }
 
 Application::~Application()
