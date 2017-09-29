@@ -139,6 +139,8 @@ class Form
     virtual Boolean HandlePopupListSelect(UInt triggerID,
 					UInt listID,
 					UInt selection);
+    virtual Boolean HandleKeyDown(UInt chr, UInt keyCode, UInt &modifiers);
+
     virtual Boolean Open(); // draw time
     virtual Boolean Update();
   public:
@@ -148,6 +150,7 @@ class Form
     {
         return id;
     }
+    virtual void PostHandle(EventType &event);
     virtual void Init();
     void PostLoadEvent()
     {

@@ -2,30 +2,61 @@
 
 #define VARVECT
 
-#ifndef TEST
+#ifdef IS_FOR_PALM
 #include "ptrsc.h"
 #include "fw.h"
-#endif
+#endif // IS_FOR_PALM
 
 #include "dict.h"
 
-#ifdef TEST
+#ifdef DUMP
+unsigned long gncnt = 0, dbcnt = 0;
+int debug = 0;
+#endif // DUMP
+
 extern int debug;
 
-void ShowVector(unsigned long *vec)
+void VariableSet::ComputeConstraints()
 {
-    printf("\nVar assignments:\n\n");
-    for (int v = 0; v < 27; v++)
+    for (int i = 0; i < 26; i++)
+        if (used[i])
+	    constraints[i] &= used[i];
+}
+
+void VariableSet::Print(char *buf, int v) const
+{
+    int dv = v+1; // display values start from 1 not 0
+    buf[0] = (char)('0'+dv/10);
+    buf[1] = (char)('0'+dv%10);
+    if (vars[v])
     {
-        printf("%02d ", v);
-	for (int c = 0; c < 26; c++)
-	    if ((vec[v] & (1ul<<c)) != 0)
-		printf("%c", c+'A');
-	printf("\n");
+	buf[2] = '=';
+	buf[3] = vars[v];
+	buf[4] = 0;
+    }
+    else
+    {
+	buf[2] = ' ';
+	int pos = 3;
+	for (char c = 'A'; c < 'Z'; c++)
+	    if (IsChInConstraint(v, c))
+		buf[pos++] = c;
+	buf[pos] = 0;
     }
 }
 
-#endif
+void VariableSet::Show() const
+{
+#ifndef IS_FOR_PALM
+    printf("\nVar assignments:\n\n");
+    for (int v = 0; v < 26; v++)
+    {
+        char buf[40];
+	Print(buf, v);
+	puts(buf);
+    }
+#endif // IS_FOR_PALM
+}
 
 const char *ltoa(unsigned long l)
 {
@@ -45,51 +76,47 @@ const char *ltoa(unsigned long l)
     }
 }
 
-#ifdef TEST
-DictionaryDatabase::DictionaryDatabase() :
+#ifdef IS_FOR_PALM
+void DictionaryDatabase::Init()
 #else
-DictionaryDatabase::DictionaryDatabase(class Form *owner_in) :
-      Database(),
-      owner(owner_in),
-#endif
-      varvector_out(0),
-      current_record(0),
-      current_recnum(-1),
-      sp(0),
-      start(0),
-      laststart(0),
-      stop(0),
-      vecoff(0),
-      swcnt(0),
-      stepnum(0),
-      matches(0),
-      progress(0),
-      pmask(0),
-      vlen(0),
-      plen(0),
-      wildfloats(0),
-      vtot(0),
-      matchtype(0),
-      mincnt(0),
-      maxcnt(0),
-      minlen(0),
-      maxlen(0),
-      //idx;
-      numlens(0),
-      lennow(0),
-      progpoint(0),
-      has_float_ranges(0),
-      simple_search(1),
-      has_place_constraints(0)
-
+void DictionaryDatabase::Init(const char *fname)
+#endif // IS_FOR_PALM
 {
+#ifdef IS_FOR_PALM
+    owner = 0;
+#endif
+    vars = 0;
+    current_record = 0;
+    current_recnum = -1;
+    sp = 0;
+    start = 0;
+    laststart = 0;
+    stop = 0;
+    vecoff = 0;
+    swcnt = 0;
+    stepnum = 0;
+    matches = 0;
+    progress = 0;
+    pmask = 0;
+    vlen = 0;
+    plen = 0;
+    wildfloats = 0;
+    vtot = 0;
+    matchtype = 0;
+    mincnt = 0;
+    maxcnt = 0;
+    minlen = 0;
+    maxlen = 0;
+    numlens = 0;
+    lennow = 0;
+    progpoint = 0;
+    has_float_ranges = 0;
+    simple_search = 1;
+    has_place_constraints = 0;
     memset((char*)allocpool, 0, sizeof(allocpool[0])*26);
     memset((char*)fixedpool, 0, sizeof(fixedpool[0])*26);
     memset((char*)maxpool, 0, sizeof(maxpool[0])*26);
     memset((char*)need, 0, sizeof(need[0])*26);
-#ifdef VARVECT
-    memset((char*)varvector_in, (char)0xff, sizeof(varvector_in[0])*27);
-#endif
     memset((char*)nstk, 0, sizeof(nstk[0])*30);
     memset((char*)starts, 0, sizeof(starts[0])*32);
     memset((char*)anchormasks, 0, sizeof(anchormasks[0])*MAXPATLEN);
@@ -99,17 +126,19 @@ DictionaryDatabase::DictionaryDatabase(class Form *owner_in) :
     memset((char*)lastmulti, 0, sizeof(lastmulti[0])*80);
 
     // open the database
+#ifdef IS_FOR_PALM
     (void)Open();
-#ifdef TEST
-    if (fp)
-#else
     if (db)
-#endif
+#else
+    (void)Open(fname);
+    if (fp)
+#endif // IS_FOR_PALM
     {
-#ifdef TEST
+#ifdef UNIX
 	nodesize = 4;
         current_record = new unsigned char[NodesPerRecord*4];
 #else
+#ifdef IS_FOR_PALM
         VoidHand h = QueryRecord(0);
         if (h)
         {
@@ -123,18 +152,33 @@ DictionaryDatabase::DictionaryDatabase(class Form *owner_in) :
 	    }
             MemHandleUnlock(h);
         }
-#endif
+#else
+	// find the nodesize in the .pdb file
+	unsigned char v[4];
+	fseek(fp, 76, SEEK_SET);
+	if (fread(v, 2, 1, fp)>0)
+	    numrecords = (v[0]<<8) | v[1];
+	nodeStart = 78 + 8 * numrecords;
+	fseek(fp, nodeStart, SEEK_SET);
+	if (fread(v, 4, 1, fp)>0)
+	    if (v[2]==3)
+	        nodesize = 3;
+	    else
+	        nodesize = 4;
+        current_record = new unsigned char[NodesPerRecord*nodesize];
+#endif // IS_FOR_PALM
+#endif // UNIX
     }
 }
 
 DictionaryDatabase::~DictionaryDatabase()
 {
     if (current_record) 
-#ifdef TEST
-        delete [] current_record;
-#else
+#ifdef IS_FOR_PALM
         MemHandleUnlock(current_handle);
-#endif
+#else
+        delete [] current_record;
+#endif // IS_FOR_PALM
 }
 
 const char *DictionaryDatabase::MatchTypeName(UInt t)
@@ -179,19 +223,19 @@ const char *DictionaryDatabase::LimitName(UInt n)
 DictionaryDatabase::DictionaryNode
     DictionaryDatabase::GetNode(unsigned long n)
 {
-#ifdef TEST
-    --n;
+#ifdef DUMP
+    gncnt++;
 #endif
+#ifdef UNIX
+    --n;
+#endif // UNIX
     int rn = Node2Record(n);
     if (current_recnum != rn)
     {
-#ifdef TEST
-	fseek(fp, rn*NodesPerRecord*4, SEEK_SET);
-	if (fread(current_record, 4, NodesPerRecord, fp)>0)
-	{
-            current_recnum = rn;
-	}
-#else
+#ifdef DUMP
+        dbcnt++;
+#endif
+#ifdef IS_FOR_PALM
         // unlock the current record
             
         if (current_record)
@@ -206,7 +250,18 @@ DictionaryDatabase::DictionaryNode
             	(unsigned char*)MemHandleLock(current_handle);
             current_recnum = rn;
         }
-#endif
+#else
+        // !! must make nodeStart the offset in the pdb of the nodes,
+	// !! and nodesize set to 3 or 4 as determined from pdb
+	// nodeStart = 78 + 8 * nrecs
+	// nrecs is stored as a short at offset 76
+	// 
+	fseek(fp, nodeStart + rn*NodesPerRecord*nodesize, SEEK_SET);
+	if (fread(current_record, nodesize, NodesPerRecord, fp)>0)
+	{
+            current_recnum = rn;
+	}
+#endif // IS_FOR_PALM
         else
         {
             current_record = 0;
@@ -272,9 +327,8 @@ unsigned long DictionaryDatabase::NextPatternElt(char *&pat,
     {
         unsigned long tmpmask = 0ul;
 	int negate = 0;
-	rtn = 0ul;
 	pat++;
-	rtn = 0l;
+	rtn = 0ul;
 	if (*pat=='!' || *pat=='^')
 	{
 	    negate=1;
@@ -332,27 +386,30 @@ char *DictionaryDatabase::NextPat(char *pat, int pos)
 	    }
 	}
 	else
-#endif
+#endif // WORDEND
 	if (isdigit(*pat)) // variable placeholder
 	{
-	    v = (*pat)-'0';
+	    int var = (*pat)-'0';
 	    if (isdigit(pat[1]))
 	    {
- 		v = v*10 + (pat[1]-'0');
+ 		var = var*10 + (pat[1]-'0');
 	    	++pat;
 	    }
-	    if (v > 26) return 0; // must be in range 0..26
-	    anchormasks[vlen++] = VARNUM | v;
+	    if (var<1 || var > 26) return 0; // must be in range 1..26
+	    --var;
+	    anchormasks[vlen++] = VARNUM | var;
 	    simple_search = 0;
 	    if (pat[1]=='/') // associated letter is explicitly given
 	    {
 	        pat += 2;
 #ifdef VARVECT
 	        int is_float, is_single;
-		if (varvector_out &&
-		    (varvector_in[v] = NextPatternElt(pat, is_float, is_single)) == 0)
-		    return 0; // syntax error
-#endif
+		if (vars)
+		    if ((v = NextPatternElt(pat, is_float, is_single)) == 0)
+		        return 0; // syntax error
+		    else
+		        vars->SetConstraint(var, v);
+#endif // VARVECT
 	    }
 	}
         else
@@ -468,36 +525,38 @@ int DictionaryDatabase::GrabLetter(DictionaryNode &n)
     int idx = n.Index();
     if (vmask & VARNUM) // variable
     {
-	int vnum = (int)(vmask & 0xff);
+	int vnum = (int)(vmask & 0xff); // var #
 	if (vnum < 0 || vnum > 26) return -1;
-	if (refcount[vnum]==0) // first use
+	if (refcount[vnum]==0) // first use of this var
 	{
-	    if (varset[idx]==0)	// mustn't be in use by a different var
+	    if (varset[idx]==0)	// letter mustn't be in use by a different var
 #ifdef VARVECT
-	    	if (varvector_out==0 ||
-		   (varvector_in[vnum] & (1ul<<idx)) != 0) // must be allowed
-#endif
+	    	if (vars==0 || vars->CanUseIdx(vnum, idx)) // must be allowed
+#endif // VARVECT
 	    {
-		refcount[vnum] = 1;
-		varset[idx] = vnum+1;
+		refcount[vnum] = 1; // variable in use
+		varset[idx] = vnum+1; // bind letter to variable #
 	    	return 0;
 	    }
 	}
-	else if (varset[idx] == (vnum+1)) // must match earlier use
+	else if (varset[idx] == (vnum+1)) // is letter bound to var?
 	{
-	    ++refcount[vnum];
+	    ++refcount[vnum]; // up the reference count
 	    return 0;
 	}
+	// else failure
     }
     else if ((vmask & ALL) == 0) // floatiing
     {
         if (RemoveFromPool(idx) >= 0)
             return 0;
+	// else failure
     }
     else // anchored
     {
 	if (((1ul<<idx) & vmask) != 0ul)
             return 0;
+	// else failure
     }
     return -1;
 }
@@ -505,12 +564,15 @@ int DictionaryDatabase::GrabLetter(DictionaryNode &n)
 void DictionaryDatabase::ReplaceLetter(DictionaryNode &n)
 {
     unsigned long vmask = anchormasks[sp+vecoff];
+#ifdef VARVECT
     if (vmask & VARNUM) // variable
     {
-	if (--refcount[vmask&0xff] == 0)
-	    varset[n.Index()] = 0;
+	if (--refcount[vmask&0xff] == 0) // variiable out of use?
+	    varset[n.Index()] = 0; // unbind the letter
     }
-    else if ((vmask & ALL) == 0) // floating
+    else
+#endif // VARVECT
+      if ((vmask & ALL) == 0) // floating
 	 ReplaceInPool(n.Index());
 }
 
@@ -532,35 +594,26 @@ int DictionaryDatabase::StartConsult(char *pat,
 				      int multi_in,
 				      int minlen_in, int maxlen_in,
 				      int mincnt_in, int maxcnt_in,
-				      unsigned long *varvector)
+				      VariableSet *vars_in)
 {
     progpoint = 0;
-#ifdef TEST
-    if (fp == 0)
-    {
-        Open();
-	if (fp == 0) return -1;
-    }
-#else
+#ifdef IS_FOR_PALM
     if (db == 0)
     {
         Open();
 	if (db == 0) return -1;
     }
-#endif
-#ifdef VARVECT
-    varvector_out = varvector;
-    if (varvector)
+#else
+    if (fp == 0)
     {
-	for (int i = 0; i < 27; i++)
-	{
-	    varvector_in[i] = varvector[i];
-	    if (varvector_in[i]&0x80000000ul)
-	        varvector_in[i] = 0x3ffffffful;
-	    varvector_out[i] = 0x80000000ul; // mark as unused
-	}
+        Open();
+	if (fp == 0) return -1;
     }
-#endif
+#endif // IS_FOR_PALM
+#ifdef VARVECT
+    vars = vars_in;
+    vars->ClearUsed();
+#endif // VARVECT
     memset((char*)allocpool, 0, sizeof(allocpool[0])*26);
     memset((char*)fixedpool, 0, sizeof(fixedpool[0])*26);
     memset((char*)maxpool, 0, sizeof(maxpool[0])*26);
@@ -577,7 +630,7 @@ int DictionaryDatabase::StartConsult(char *pat,
 	anchormasks[vlen-1] |= WORDEND;
 	multi_in = 1;
     }
-#endif
+#endif // WORDEND
     if (!has_float_ranges)
     {
         // convert any wildfloats into fixed ALLs
@@ -623,22 +676,23 @@ int DictionaryDatabase::StartConsult(char *pat,
     pmask = 0ul;
     for (int i = 0; i < plen; i++)
         pmask |= (1ul << i);
-    switch(matchtype)
+    if (matchtype==USEALL)
     {
-    case USEALL:
 	wlen[0] = vlen;
 	vpos[0] = 0;
 	numlens = 1;
-	break;
-    case PREFIX:
+    }
+    else if (matchtype==PREFIX)
+    {
 	for (int i = minlen; i<=maxlen; i++)
 	{
 	    wlen[i-minlen] = i;
 	    vpos[i-minlen] = 0;
 	}
 	numlens = maxlen-minlen+1;
-	break;
-    case SUFFIX:
+    }
+    else if (matchtype==SUFFIX)
+    {
 	for (int i = minlen; i<=maxlen; i++)
 	{
 	    wlen[i-minlen] = i;
@@ -648,7 +702,7 @@ int DictionaryDatabase::StartConsult(char *pat,
     }
     lennow = progress = matches = 0;
     InitStack(wlen[0], vpos[0]);
-#ifdef TEST
+#ifndef IS_FOR_PALM
     printf("Mincnt %d Maxcnt %d\n", mincnt, maxcnt);
     printf("Minlen %d Maxlen %d\n", minlen, maxlen);
     printf("Wild Floats %d   Has Float Ranges %d\n", wildfloats, has_float_ranges);
@@ -665,8 +719,7 @@ int DictionaryDatabase::StartConsult(char *pat,
     {
         printf("Var Pool %d: %08X\n", i,  varpool[i]);
     }
-    ShowVector(varvector_in);
-#endif
+#endif // IS_FOR_PALM
     return 0;
 }
 
@@ -694,7 +747,8 @@ int DictionaryDatabase::MustStop()
 
 void DictionaryDatabase::ShowProgress(DictionaryNode &N)
 {
-    if (sp == (progpoint+1))
+#ifdef IS_FOR_PALM
+    if (owner && sp == (progpoint+1))
     {
 	DictionaryNode n = Nstk[progpoint];
         int p;
@@ -702,11 +756,12 @@ void DictionaryDatabase::ShowProgress(DictionaryNode &N)
 	    p = ((n.Index()*26+N.Index()))/6;
 	else
 	    p = ((lennow+1)*(n.Index()*26+N.Index()))/(6*numlens);
-#ifndef TEST
 	if (p != progress)
             owner->ShowProgress(progress = p);
-#endif
     }
+#else
+    (void)N;
+#endif // IS_FOR_PALM
 }
 // iTERATIVE IMPLEMENTATION OF RECURSIVE SEARCH
 
@@ -715,18 +770,18 @@ int DictionaryDatabase::NextStep(char *line)
     int rtn = 1; // 1 = got more; 0 = got word, -1 done
     DictionaryNode N = Nstk[sp];
 
-#ifdef TEST
+#ifdef IS_FOR_PALM
+    ShowProgress(N);
+    if ((++stepnum%100)==0 && MustStop())
+        return -2;
+#else
     if (debug)
     {
         GetWord(line, stop);
         printf("%d  sp %d  Node %d Line %s ", stepnum++, sp, nstk[sp], line);
         N.Print();
     }
-#else
-    ShowProgress(N);
-    if ((++stepnum%100)==0 && MustStop())
-        return -2;
-#endif
+#endif // IS_FOR_PALM
 
     if (GrabLetter(N) == 0)
     {
@@ -736,7 +791,7 @@ printf("sp %d vecoff %d anchormasks[sp+vecoff] %lX WORDEND %d is_term %d start %
 	sp, vecoff, anchormasks[sp+vecoff],
 	(anchormasks[sp+vecoff]&WORDEND),
 	N.IsTerminal(), start, wlen);
-#endif
+#endif //0
         if (sp == stop) // at the end?
         {
 	    if (N.IsTerminal() && wlen>=minlen && swcnt>=mincnt)
@@ -744,27 +799,24 @@ printf("sp %d vecoff %d anchormasks[sp+vecoff] %lX WORDEND %d is_term %d start %
 		GetWord(line, stop);
 #ifdef VARVECT
 		// Update the set of possible variables
-		if (varvector_out)
+		if (vars)
 		{
-		    for (int i = 0; i < 26; i++)
+		    for (int i = 0; i < 26; i++) // letters
 		    {
-		        int var = varset[i];
-		        if (var < 1 || var>26) continue;
-		        if (refcount[--var]>0)
-			{
-			    varvector_out[var] &= ~0x80000000ul;
-			    varvector_out[var] |= (1ul << i);
-			}
+		        int var = varset[i]; // get var# used by letter
+		        if (var<1 || var>26) continue;
+//		        if (refcount[var-1]>0) // should be true
+			   vars->UseIdx(var-1, i);
 		    }
 		}
-#endif
+#endif // VARVECT
 		rtn = 0;
 	    }
         }
 	else if (N.IsTerminal() && wlen>=minlen && swcnt<maxcnt
 #ifdef WORDEND
 		&& (!has_wordend_constraints || (anchormasks[sp+vecoff]&WORDEND))
-#endif
+#endif // WORDEND
 		)
 	{
 	    // push on to next word
@@ -786,7 +838,7 @@ printf("sp %d vecoff %d anchormasks[sp+vecoff] %lX WORDEND %d is_term %d start %
 #ifdef WORDEND
 		&& (!has_wordend_constraints ||
 			(anchormasks[sp+vecoff]&WORDEND) == 0l)
-#endif
+#endif // WORDEND
 		)
         {
 	    // push on to next letter. If multi-word, enforce
@@ -830,14 +882,14 @@ printf("sp %d vecoff %d anchormasks[sp+vecoff] %lX WORDEND %d is_term %d start %
 
 	    while (laststart > 0 && nstk[--laststart] > 26)
 	        (void)0;
-#endif
+#endif // 1
 	    --sp;
 	    N = Nstk[sp];
 	    if (N.FirstChild() && (sp-start+1)<maxlen
 #ifdef WORDEND
 		&& (!has_wordend_constraints ||
 			(anchormasks[sp+vecoff]&WORDEND) == 0l)
-#endif
+#endif // WORDEND
 		)
 	    {
 	        ++sp;
@@ -870,29 +922,35 @@ int DictionaryDatabase::NextMatch(char *line, int len)
 	else if (x < 0)
 	{
 	    if (++lennow >= numlens)
+	    {
+#ifdef VARVECT
+		// Update the set of variable constraints
+		if (vars) vars->ComputeConstraints();
+#endif // VARVECT
 	        return -1;
+	    }
 	    InitStack(wlen[lennow], vpos[lennow]);
 	}
 	else if (x == 0) 
 	    return ++matches;
     }
-#else
+#else // !1
     DictionaryNode N = GetNode(++start);
-#ifdef TEST
-    sprintf(line, "%ld %c %c%c %ld", start, N.Char(),
-		(N.IsTerminal()?'T':' '),
-		(N.IsLastPeer()?'L':' '),
-		N.FirstChild());
-#else
+#ifdef IS_FOR_PALM
     line[0] = N.IsTerminal() ? 'T' : ' ';
     line[1] = N.IsLastPeer() ? 'P' : ' ';
     line[2] = ' ';
     line[3] = N.Char();
     line[4] = ' ';
     strcpy(line+5, ltoa(N.FirstChild()));
-#endif
+#else
+    sprintf(line, "%ld %c %c%c %ld", start, N.Char(),
+		(N.IsTerminal()?'T':' '),
+		(N.IsLastPeer()?'L':' '),
+		N.FirstChild());
+#endif // IS_FOR_PALM
     return 0;
-#endif
+#endif // 1
 }
 
 void DictionaryDatabase::Reset()
@@ -905,5 +963,54 @@ void DictionaryDatabase::Reset()
     lennow = stepnum = progress = matches = 0;
     InitStack(wlen[lennow], vpos[lennow]);
 }
+
+
+#ifdef DUMP
+
+char newWord[32];
+
+void DictionaryDatabase::RecursiveDump(int pos, long n, FILE *ofp)
+{
+    int c;
+    if (n==(long)0) return;
+    for (;;)
+    {
+    	DictionaryNode N = GetNode(n);
+	newWord[pos] = N.Char();
+	/* If the node is terminal, we have a valid matched word. */
+	if (N.IsTerminal())
+	{
+	    newWord[pos+1]=0;
+	    fprintf(ofp, "%s\n", newWord);
+	}
+	RecursiveDump(pos+1, N.FirstChild(), ofp);
+	/* Move to next edge */
+	if (!N.IsLastPeer()) n++;
+	else break;
+    }
+}
+
+void DictionaryDatabase::Dump(FILE *fp)
+{
+    RecursiveDump(0, 1l, fp);
+}
+
+void DictionaryDatabase::RawDump(FILE *fp)
+{
+    unsigned long i;
+    long numnodes = numrecords * NodesPerRecord;
+    fprintf(fp, "Nodes: %ld\n", numnodes);
+    for (i=1;i<=numnodes;i++)
+    {
+	DictionaryNode N = GetNode(i);
+	fprintf(fp, "%-6ld %-6ld %c%c %2d (%c)\n", (long)i,
+			(long)N.FirstChild(), N.IsTerminal()?'T':' ',
+			N.IsLastPeer()?'L':' ',
+			(int)N.Index(), N.Char());
+    }
+}
+
+#endif // DUMP
+
 
 

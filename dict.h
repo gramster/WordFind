@@ -16,22 +16,105 @@
 
 const char *ltoa(unsigned long l);
 
-//#define NodesPerRecord		1000 // version 1.6 and befor
-#define NodesPerRecord		1000
+#define NodesPerRecord		1000 // version 1.8 and befor
+//#define NodesPerRecord		256 // version 2.0 and after
 #define DictDBType		'dict'
 
+class VariableSet
+{
+    unsigned long defmask;
+    char vars[26];
+    unsigned long used[26]; // current set of matched letters
+    unsigned long constraints[26]; // cumulative intersection of used
+  public:
+    void ClearAssignments()
+    {
+        memset(vars, (char)0, 26);
+	defmask = 0x3fffffful;
+    }
+    char Assignment(int v) const
+    {
+        return vars[v];
+    }
+    void Assign(int v, char c)
+    {
+        if (vars[v])
+	    defmask |= 1ul << (vars[v]-'A');
+	defmask &= ~(1ul << (c-'A'));
+        vars[v] = c;
+    }
+    unsigned long Constraint(int v) const
+    {
+	return (defmask & constraints[v]);
+    }
+    unsigned long AvailableChoicesMask(int v) const
+    {
+        return (vars[v] ? (1ul << (vars[v]-'A')) : Constraint(v));
+    }
+    int CanUseIdx(int v, int idx) const
+    {
+        return (AvailableChoicesMask(v) & (1ul<<idx))!=0;
+    }
+    inline int CanUseChar(int v, char c) const
+    {
+        return CanUseIdx(v, (int)(c-'A'));
+    }
+    int IsIdxInConstraint(int v, int idx) const
+    {
+        return (Constraint(v) & (1ul<<idx))!=0;
+    }
+    inline int IsChInConstraint(int v, char c) const
+    {
+        return IsIdxInConstraint(v, c-'A');
+    }
+    void ClearUsed()
+    {
+        memset((char*)used, (char)0, 26*sizeof(long));
+    }
+    void ResetConstraints()
+    {
+        memset((char*)constraints, (char)0xff, 26*sizeof(long));
+    }
+    void SetConstraint(int v, unsigned long m)
+    {
+        constraints[v] = m;
+    }
+    void UseIdx(int v, int idx)
+    {
+        used[v] |= 1ul << idx;
+    }
+    void UseCh(int v, char c)
+    {
+        UseIdx(v, (int)(c-'A'));
+    }
+    void ComputeConstraints();
+    VariableSet()
+    { }
+    void Init()
+    {
+        ClearAssignments();
+	ResetConstraints();
+    }
+    void Print(char *buf, int v) const;
+    void Show() const;
+    ~VariableSet()
+    {}
+};
+
 class DictionaryDatabase
-#ifndef TEST
+#ifdef IS_FOR_PALM
     : public Database
 #endif
 {
-#ifndef TEST
+#ifdef IS_FOR_PALM
     class Form *owner;
 #endif
     int nodesize;
     int allocpool[26], fixedpool[26], maxpool[26], need[26];
     int varset[26], refcount[27];
-    unsigned long varvector_in[27], *varvector_out;
+
+    VariableSet *vars;
+
     // node stack for non-recursive matching
     unsigned long nstk[30];
     int sp, start, laststart, stop, vecoff, swcnt;
@@ -50,7 +133,7 @@ class DictionaryDatabase
     int has_place_constraints;
     int has_wordend_constraints;
 
-#ifdef TEST // UNIX dawg is differnt for i386
+#ifdef UNIX // UNIX dawg is differnt for i386
 #define TVSH	29
 #define PVSH	30
 #define IVSH	24
@@ -68,13 +151,15 @@ class DictionaryDatabase
   public:
     static const char *MatchTypeName(UInt t);
     static const char *LimitName(UInt n);
-    unsigned long *GetVectorIn()
+#ifdef IS_FOR_PALM
+    void SetProgressOwner(Form *o)
     {
-        return varvector_in;
+        owner = o;
     }
-    unsigned long *GetVectorOut()
+#endif
+    VariableSet *GetVariables() const
     {
-        return varvector_out;
+        return vars;
     }
     unsigned long LetterMask(char c)
     {
@@ -109,14 +194,9 @@ class DictionaryDatabase
         }
         inline unsigned long FirstChild() const
         {
-#ifdef TEST
             return (v&0xFFFFFFul);
-#else
-            //return (v&0x1FFFFFFul);
-            return (v&0xFFFFFFul);
-#endif
         }
-#ifdef TEST
+#ifndef IS_FOR_PALM
 	void Print()
 	{
 	    printf(" %c  %c%c\n", Char(),
@@ -133,10 +213,12 @@ class DictionaryDatabase
     }
     
     unsigned char *current_record;
-#ifdef TEST
-    FILE *fp;
-#else
+#ifdef IS_FOR_PALM
     VoidHand current_handle;
+#else
+    FILE *fp;
+    int numrecords;
+    unsigned long nodeStart;
 #endif
     int current_recnum;
 
@@ -156,12 +238,15 @@ class DictionaryDatabase
     int NextStep(char *line);
     DictionaryNode GetNode(unsigned long n);
     virtual int MustStop();
+#ifdef DUMP
+    void RecursiveDump(int pos, long n, FILE *ofp);
+#endif
   public:
     int StartConsult(char *pat, int type_in = USEALL,
     			int multi_in = 0,
     			int minlen_in=0, int maxlen_in=0, 
 			int mincnt_in=0, int maxcnt_in=0,
-			unsigned long *varvector=0);
+			VariableSet *vars_in=0);
     int NextMatch(char *line, int len);
     void Reset();
     inline int Matches() const
@@ -172,28 +257,43 @@ class DictionaryDatabase
     {
         progress = 0;
     }
+#ifdef IS_FOR_PALM
     Boolean Open()
+#else
+    Boolean Open(const char *fname = 0)
+#endif
     {
-#ifdef TEST
-	fp = fopen("dawg", "r");
+#ifdef IS_FOR_PALM
+        return Database::Open(DictDBType, dmModeReadOnly);
+#else
+#ifdef UNIX
+	fp = fopen((fname ? fname : "dawg"), "rb");
+#else
+	fp = fopen((fname ? fname : "dawg.pdb"), "rb");
+#endif
 	if (fp == 0) perror("fopen");
 	return fp ? 1 : 0;
-#else
-        return Database::Open(DictDBType, dmModeReadOnly);
 #endif
     }
-#ifdef TEST
-    DictionaryDatabase();
+#ifdef DUMP
+    void RawDump(FILE *fp);
+    void Dump(FILE *fp);
+#endif
+#ifdef IS_FOR_PALM
+    DictionaryDatabase() : Database() {}
+    void Init();
 #else
-    DictionaryDatabase(class Form *owner_in);
+    DictionaryDatabase() {}
+    void Init(const char *fname = 0);
 #endif
     virtual ~DictionaryDatabase();
 };
 
-#ifdef TEST
+#ifndef IS_FOR_PALM
 void ShowVector(unsigned long *vec);
 #endif
 
 #endif
+
 
 

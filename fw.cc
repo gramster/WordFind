@@ -82,7 +82,6 @@ Boolean Database::Open(ULong type, UInt mode, ULong creator)
         return False;
     }
 }
-
     
 Boolean Database::Create(CharPtr name, ULong type, 
 					UInt mode, ULong creator)
@@ -186,6 +185,11 @@ List::~List()
 Form::Form(UInt id_in)
     : id(id_in), frm(0)
 { 
+}
+
+void Form::PostHandle(EventType &event)
+{
+    (void)event;
 }
 
 void Form::Init()
@@ -378,6 +382,11 @@ Boolean Form::EventHandler(EventPtr event) // static
 	      				event->data.lstSelect.selection);
 	handled = False; // important!
 	break;
+    case keyDownEvent:
+        handled = form->HandleKeyDown(event->data.keyDown.chr, 
+        				event->data.keyDown.keyCode,
+        				event->data.keyDown.modifiers);
+        break;
     default:
         handled = False;
     }
@@ -415,6 +424,14 @@ Boolean Form::HandleScroll(UInt objID, Short oldv, Short newv)
     (void)objID;
     (void)oldv;
     (void)newv;
+    return False;
+}
+
+Boolean Form::HandleKeyDown(UInt chr, UInt keyCode, UInt &modifiers)
+{
+    (void)chr;
+    (void)keyCode;
+    (void)modifiers;
     return False;
 }
 
@@ -669,6 +686,8 @@ void Application::EventLoop()
 		    ::FrmDispatchEvent(&event);
 	    }
 	}
+	if (GetForm())
+	    GetForm()->PostHandle(event);
     } while (event.eType != appStopEvent);
 }
 
